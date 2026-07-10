@@ -1,31 +1,25 @@
 """
-Ethereum connection module.
+Ethereum Connection Module.
 
-Creates a reusable connection to Ethereum using Alchemy.
+Obtains the active Web3 connection through the Provider Manager.
 """
 
-from web3 import Web3
-
-from config.settings import (
-    ALCHEMY_HTTP_URL,
-    validate_settings,
-)
-
-# Validate configuration before connecting
-validate_settings()
-
-# Create the Web3 connection
-w3 = Web3(Web3.HTTPProvider(ALCHEMY_HTTP_URL))
+from providers.manager import get_provider
 
 
 def get_connection():
     """
     Return the active Web3 connection.
+
+    Raises:
+        ConnectionError: If the active provider cannot establish a connection.
     """
 
-    if not w3.is_connected():
+    provider = get_provider()
+
+    if not provider.is_connected():
         raise ConnectionError(
-            "Unable to connect to the Ethereum network."
+            "Unable to connect to the active blockchain provider."
         )
 
-    return w3
+    return provider.get_web3()
