@@ -1,16 +1,18 @@
 """
-Provider Manager.
+Compatibility layer.
+
+This module exists for backward compatibility.
+
+New code should import ProviderFactory from
+providers.factory.
 """
 
-from providers.alchemy import AlchemyProvider
-
-
-_provider = AlchemyProvider()
+from providers.factory import ProviderFactory
 
 
 def get_provider():
     """
-    Return the active provider.
+    Return the configured provider.
     """
 
-    return _provider
+    return ProviderFactory.get_provider()
