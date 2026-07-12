@@ -1,10 +1,17 @@
 """
-Provider Factory
+Universal Blockchain Platform (UBP)
 
-Creates blockchain providers for the Universal Blockchain Platform.
+Version : 0.8.0
+Module  : Provider Factory
+Author  : Jaramogi Diddy
+
+Responsible for creating blockchain provider instances.
 """
 
 from providers.alchemy import AlchemyProvider
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ProviderFactory:
@@ -15,7 +22,15 @@ class ProviderFactory:
     @staticmethod
     def get_provider():
         """
-        Return the configured blockchain provider.
+        Create and return the configured blockchain provider.
         """
 
-        return AlchemyProvider()
+        logger.info("Creating Alchemy provider.")
+
+        provider = AlchemyProvider()
+
+        provider.connect()
+
+        logger.info("Provider created successfully.")
+
+        return provider

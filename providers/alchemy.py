@@ -1,7 +1,11 @@
 """
-Alchemy Provider
+Universal Blockchain Platform (UBP)
 
-Provides a Web3 connection using Alchemy.
+Version : 0.8.0
+Module  : Alchemy Provider
+Author  : jaramogi Diddy
+
+Provides Ethereum connectivity through the Alchemy API.
 """
 
 from web3 import Web3
@@ -14,44 +18,52 @@ from config.settings import (
 from providers.base import BaseProvider
 
 from exceptions.blockchain_exceptions import (
-    ProviderConnectionError,
-    ConfigurationError,
+    BlockchainConnectionError,
 )
+
+from core.logger import get_logger
+
+
+logger = get_logger(__name__)
 
 
 class AlchemyProvider(BaseProvider):
     """
-    Ethereum provider using Alchemy.
+    Ethereum provider backed by Alchemy.
     """
 
     def __init__(self):
+        """
+        Initialize the provider.
+        """
         validate_settings()
 
         self._web3 = None
 
-    def connect(self):
+    def connect(self) -> None:
         """
-        Establish a Web3 connection.
+        Establish a connection to Alchemy.
         """
 
-        try:
-            self._web3 = Web3(
-                Web3.HTTPProvider(ALCHEMY_HTTP_URL)
+        logger.info("Connecting to Alchemy provider...")
+
+        self._web3 = Web3(
+            Web3.HTTPProvider(ALCHEMY_HTTP_URL)
+        )
+
+        if not self._web3.is_connected():
+
+            logger.error("Alchemy connection failed.")
+
+            raise BlockchainConnectionError(
+                "Unable to connect to the Alchemy provider."
             )
 
-            if not self._web3.is_connected():
-                raise ProviderConnectionError(
-                    "Unable to connect to the Alchemy provider."
-                )
+        logger.info("Connected to Alchemy successfully.")
 
-            return self._web3
-
-        except Exception as error:
-            raise ConfigurationError(str(error))
-
-    def is_connected(self):
+    def is_connected(self) -> bool:
         """
-        Check provider connectivity.
+        Check whether the provider is connected.
         """
 
         if self._web3 is None:
@@ -59,9 +71,9 @@ class AlchemyProvider(BaseProvider):
 
         return self._web3.is_connected()
 
-    def get_web3(self):
+    def get_web3(self) -> Web3:
         """
-        Return the active Web3 connection.
+        Return the active Web3 instance.
         """
 
         if self._web3 is None:

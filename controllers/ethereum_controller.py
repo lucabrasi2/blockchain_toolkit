@@ -1,58 +1,45 @@
 """
 Ethereum Controller
-
-Coordinates Ethereum-related user actions for the
-Universal Blockchain Platform (UBP).
 """
 
-from ethereum.wallets import (
-    is_valid_address,
-    checksum_address,
-    get_eth_balance,
-    get_nonce,
+from exceptions.blockchain_exceptions import (
+    InvalidWalletAddressError,
+    UBPException,
 )
 
-from core.display.wallet_display import display_wallet_report
 
-
-def wallet_inspector():
+class EthereumController:
     """
-    Ethereum Wallet Inspector.
-
-    Prompts the user for a wallet address, validates it,
-    retrieves wallet information, and displays a formatted report.
+    Ethereum Controller.
     """
 
-    print("\nEnter Ethereum wallet address:")
+    def __init__(self, wallet_service):
+        self.wallet_service = wallet_service
 
-    address = input("> ").strip()
+    def wallet_inspector(self):
+        """
+        Inspect an Ethereum wallet.
+        """
 
-    # Validate the wallet address
-    if not is_valid_address(address):
-        print("\n❌ Invalid Ethereum wallet address.")
+        address = input("\nEnter Ethereum wallet address:\n> ").strip()
+
+        try:
+
+            report = self.wallet_service.get_wallet_report(address)
+
+            print("\n========== WALLET REPORT ==========")
+            print(f"Address : {report['address']}")
+            print(f"Balance : {report['balance_eth']} ETH")
+            print(f"Wei     : {report['balance_wei']}")
+            print(f"Nonce   : {report['nonce']}")
+
+        except InvalidWalletAddressError as error:
+            print(f"\n❌ {error}")
+
+        except UBPException as error:
+            print(f"\n❌ {error}")
+
+        except Exception as error:
+            print(f"\nUnexpected Error: {error}")
+
         input("\nPress Enter to continue...")
-        return
-
-    # Convert to checksum format
-    address = checksum_address(address)
-
-    try:
-        # Retrieve wallet information
-        balance = get_eth_balance(address)
-        nonce = get_nonce(address)
-
-        # Display the report
-        display_wallet_report(
-            address=address,
-            balance=balance,
-            nonce=nonce,
-        )
-
-    except Exception as error:
-        print("\n" + "=" * 60)
-        print("ERROR")
-        print("=" * 60)
-        print(error)
-        print("=" * 60)
-
-    input("\nPress Enter to continue...")

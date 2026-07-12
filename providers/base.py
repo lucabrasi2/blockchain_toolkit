@@ -1,31 +1,40 @@
 """
-Base Provider Interface.
+Universal Blockchain Platform (UBP)
 
-Every blockchain provider must implement these methods.
+Version : 0.8.0
+Module  : Base Provider Interface
+Author  : Jaramogi Diddy
+
+Defines the abstract interface that every blockchain
+provider must implement.
 """
 
 from abc import ABC, abstractmethod
+from web3 import Web3
 
 
 class BaseProvider(ABC):
     """
-   Abstract blockchain provider.
+    Abstract base class for blockchain providers.
     """
 
     @abstractmethod
-    def connect(self):
+    def connect(self) -> None:
         """
-        Create a connection.
+        Establish a connection to the provider.
         """
+        pass
 
     @abstractmethod
-    def is_connected(self):
+    def is_connected(self) -> bool:
         """
-        Verify the connection.
+        Return True if the provider is connected.
         """
+        pass
 
     @abstractmethod
-    def get_web3(self):
+    def get_web3(self) -> Web3:
         """
-        Return the Web3 instance.
+        Return the configured Web3 instance.
         """
+        pass
