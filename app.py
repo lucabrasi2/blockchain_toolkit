@@ -1,20 +1,20 @@
 """
 Universal Blockchain Platform (UBP)
 
-Main application entry point.
+Version : 0.8.0
+Module  : Main Application
+Author  : Jaramogi Diddy
+
+Main entry point for the Universal Blockchain Platform.
 """
 
 from core.banner import show_banner
 from core.menu import main_menu
-from core.logger import get_logger
-
 from ethereum.menu import ethereum_menu
 
-from controllers.ethereum_controller import wallet_inspector
+from core.logger import get_logger
 
-# --------------------------------------------------
-# Logger
-# --------------------------------------------------
+from controllers.ethereum_controller import EthereumController
 
 logger = get_logger(__name__)
 
@@ -23,6 +23,8 @@ def ethereum_section():
     """
     Ethereum submenu.
     """
+
+    controller = EthereumController()
 
     logger.info("Entered Ethereum module.")
 
@@ -33,29 +35,33 @@ def ethereum_section():
         if option == "1":
 
             logger.info("Wallet Inspector selected.")
-            wallet_inspector()
+            controller.wallet_inspector()
 
         elif option == "2":
 
             logger.info("Token Inspector selected.")
+
             print("\nToken Inspector Coming Soon")
             input("Press Enter to continue...")
 
         elif option == "3":
 
             logger.info("Block Explorer selected.")
+
             print("\nBlock Explorer Coming Soon")
             input("Press Enter to continue...")
 
         elif option == "4":
 
             logger.info("Transaction Explorer selected.")
+
             print("\nTransaction Explorer Coming Soon")
             input("Press Enter to continue...")
 
         elif option == "5":
 
             logger.info("Network Information selected.")
+
             print("\nNetwork Information Coming Soon")
             input("Press Enter to continue...")
 
@@ -77,7 +83,7 @@ def main():
     Main application loop.
     """
 
-    logger.info("UBP started successfully.")
+    logger.info("Universal Blockchain Platform started.")
 
     while True:
 
@@ -93,12 +99,14 @@ def main():
         elif choice == "2":
 
             logger.info("Bitcoin selected.")
+
             print("\nBitcoin module is under development.")
             input("Press Enter to continue...")
 
         elif choice == "3":
 
             logger.info("TRON selected.")
+
             print("\nTRON module is under development.")
             input("Press Enter to continue...")
 

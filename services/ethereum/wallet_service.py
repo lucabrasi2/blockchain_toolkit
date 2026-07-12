@@ -1,8 +1,14 @@
 """
-Ethereum Wallet Service
+Universal Blockchain Platform (UBP)
+
+Version : 0.8.0
+Module  : Ethereum Wallet Service
+Author  : Jaramogi Diddy
 
 Business logic for Ethereum wallet operations.
 """
+
+from core.logger import get_logger
 
 from ethereum.wallets import (
     is_valid_address,
@@ -14,17 +20,29 @@ from exceptions.blockchain_exceptions import (
     InvalidWalletAddressError,
 )
 
-from ubp_logging.logger import logger
+logger = get_logger(__name__)
 
 
 class WalletService:
     """
-    Ethereum wallet business service.
+    Business logic for Ethereum wallet operations.
     """
 
-    def validate_wallet(self, address):
+    def __init__(self):
+        """
+        Initialize the wallet service.
+        """
+        logger.info("WalletService initialized.")
+
+    def validate_wallet(self, address: str) -> bool:
         """
         Validate an Ethereum wallet address.
+
+        Args:
+            address (str): Ethereum wallet address.
+
+        Returns:
+            bool: True if valid.
 
         Raises:
             InvalidWalletAddressError:
@@ -34,32 +52,33 @@ class WalletService:
         logger.info("Validating Ethereum wallet address.")
 
         if not is_valid_address(address):
-            logger.warning(f"Invalid wallet address received: {address}")
+            logger.warning("Invalid Ethereum wallet address received.")
 
             raise InvalidWalletAddressError(
                 "Invalid Ethereum wallet address."
             )
 
-        logger.info("Ethereum wallet address validation successful.")
+        logger.info("Wallet address validation successful.")
 
         return True
 
-    def get_wallet_report(self, address):
+    def get_wallet_report(self, address: str) -> dict:
         """
         Generate a complete wallet report.
 
+        Args:
+            address (str): Ethereum wallet address.
+
         Returns:
-            dict:
-                Wallet information including address,
-                ETH balance, Wei balance, and nonce.
+            dict: Wallet information.
         """
 
-        logger.info("Generating Ethereum wallet report.")
+        logger.info("Generating wallet report.")
 
-        # Validate wallet first
+        # Validate first
         self.validate_wallet(address)
 
-        # Retrieve blockchain data
+        # Retrieve blockchain information
         balance = get_eth_balance(address)
         nonce = get_nonce(address)
 
@@ -70,6 +89,6 @@ class WalletService:
             "nonce": nonce,
         }
 
-        logger.info("Ethereum wallet report successfully generated.")
+        logger.info("Wallet report generated successfully.")
 
         return report
