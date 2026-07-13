@@ -1,7 +1,7 @@
 """
 Universal Blockchain Platform (UBP)
 
-Version : 0.8.0
+Version : 0.9.0
 Module  : Main Application
 Author  : Jaramogi Diddy
 
@@ -15,6 +15,7 @@ from ethereum.menu import ethereum_menu
 from core.logger import get_logger
 
 from controllers.ethereum_controller import EthereumController
+from controllers.network_controller import NetworkController
 
 logger = get_logger(__name__)
 
@@ -24,7 +25,8 @@ def ethereum_section():
     Ethereum submenu.
     """
 
-    controller = EthereumController()
+    ethereum_controller = EthereumController()
+    network_controller = NetworkController()
 
     logger.info("Entered Ethereum module.")
 
@@ -35,7 +37,8 @@ def ethereum_section():
         if option == "1":
 
             logger.info("Wallet Inspector selected.")
-            controller.wallet_inspector()
+
+            ethereum_controller.wallet_inspector()
 
         elif option == "2":
 
@@ -62,12 +65,12 @@ def ethereum_section():
 
             logger.info("Network Information selected.")
 
-            print("\nNetwork Information Coming Soon")
-            input("Press Enter to continue...")
+            network_controller.network_information()
 
         elif option == "6":
 
             logger.info("Leaving Ethereum module.")
+
             break
 
         else:
@@ -94,6 +97,7 @@ def main():
         if choice == "1":
 
             logger.info("Ethereum selected from main menu.")
+
             ethereum_section()
 
         elif choice == "2":
@@ -115,6 +119,7 @@ def main():
             logger.info("Application closed.")
 
             print("\nThank you for using Universal Blockchain Platform.")
+
             break
 
         else:
