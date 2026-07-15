@@ -1,85 +1,155 @@
 """
 Universal Blockchain Platform (UBP)
 
-Version : 0.8.0
-Module  : Ethereum Wallet Functions
+Version : 2.0.0
+Module  : Ethereum Wallet Utilities
+
 Author  : Jaramogi Diddy
 
-Provides wallet-related blockchain operations.
+Description
+-----------
+Provides wallet-related blockchain utilities.
+
+Responsibilities
+----------------
+• Address validation
+• Balance retrieval
+• Nonce retrieval
+• Transaction count
+• Token balance retrieval
 """
 
 from web3 import Web3
 
-from providers.factory import ProviderFactory
+from ethereum.connection import get_connection
 from core.logger import get_logger
+
 
 logger = get_logger(__name__)
 
 
-def _get_web3():
-    """
-    Return the active Web3 instance.
-    """
-
-    provider = ProviderFactory.get_provider()
-
-    return provider.get_web3()
-
-
 def is_valid_address(address: str) -> bool:
     """
-    Validate an Ethereum address.
+    Check if an Ethereum address is valid.
+
+    Parameters
+    ----------
+    address : str
+        Ethereum address.
+
+    Returns
+    -------
+    bool
+        True if the address is valid.
     """
 
-    logger.info("Validating Ethereum address.")
-
-    return Web3.is_address(address)
-
-
-def checksum_address(address: str) -> str:
-    """
-    Convert an address to EIP-55 checksum format.
-    """
-
-    return Web3.to_checksum_address(address)
+    try:
+        return Web3.is_checksum_address(address) or Web3.is_address(address)
+    except Exception:
+        return False
 
 
 def get_eth_balance(address: str) -> dict:
     """
-    Return ETH balance.
+    Get ETH balance for an address.
+
+    Parameters
+    ----------
+    address : str
+        Ethereum address.
+
+    Returns
+    -------
+    dict
+        Balance in ETH and Wei.
     """
 
-    logger.info("Retrieving wallet balance.")
+    try:
+        w3 = get_connection()
+        checksum_address = Web3.to_checksum_address(address)
+        balance_wei = w3.eth.get_balance(checksum_address)
+        balance_eth = w3.from_wei(balance_wei, "ether")
 
-    w3 = _get_web3()
+        return {
+            "wei": balance_wei,
+            "ether": float(balance_eth),
+        }
 
-    checksum = checksum_address(address)
-
-    balance_wei = w3.eth.get_balance(checksum)
-
-    balance_eth = w3.from_wei(balance_wei, "ether")
-
-    logger.info("Wallet balance retrieved successfully.")
-
-    return {
-        "wei": balance_wei,
-        "ether": balance_eth,
-    }
+    except Exception as error:
+        logger.error(f"Error getting balance: {error}")
+        return {"wei": 0, "ether": 0.0}
 
 
 def get_nonce(address: str) -> int:
     """
-    Return wallet nonce.
+    Get transaction nonce for an address.
+
+    Parameters
+    ----------
+    address : str
+        Ethereum address.
+
+    Returns
+    -------
+    int
+        Current nonce.
     """
 
-    logger.info("Retrieving wallet nonce.")
+    try:
+        w3 = get_connection()
+        checksum_address = Web3.to_checksum_address(address)
+        return w3.eth.get_transaction_count(checksum_address)
 
-    w3 = _get_web3()
+    except Exception as error:
+        logger.error(f"Error getting nonce: {error}")
+        return 0
 
-    checksum = checksum_address(address)
 
-    nonce = w3.eth.get_transaction_count(checksum)
+def get_transaction_count(address: str) -> int:
+    """
+    Get total transaction count for an address.
 
-    logger.info("Wallet nonce retrieved successfully.")
+    Parameters
+    ----------
+    address : str
+        Ethereum address.
 
-    return nonce
+    Returns
+    -------
+    int
+        Total transaction count.
+    """
+
+    return get_nonce(address)
+
+
+def get_token_balances(address: str) -> list:
+    """
+    Get token balances for an address.
+
+    Note: This is a placeholder. Full implementation
+    would require iterating through token contracts.
+
+    Parameters
+    ----------
+    address : str
+        Ethereum address.
+
+    Returns
+    -------
+    list
+        List of token balances.
+    """
+
+    try:
+        # Placeholder - implement token balance retrieval
+        # This would typically involve:
+        # 1. Getting all token contracts the address holds
+        # 2. Calling balanceOf() on each token contract
+        # 3. Returning the list of balances
+
+        return []
+
+    except Exception as error:
+        logger.error(f"Error getting token balances: {error}")
+        return []

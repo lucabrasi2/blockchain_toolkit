@@ -1,36 +1,109 @@
 """
 Universal Blockchain Platform (UBP)
 
-Version : 0.8.0
-Module  : Provider Factory
-Author  : Jaramogi Diddy
+Module:
+    Provider Factory
 
-Responsible for creating blockchain provider instances.
+Purpose:
+    Factory pattern for creating blockchain providers.
+
+Responsibilities:
+    • Create provider instances
+    • Manage provider types
+    • Handle provider configuration
+
+Author: Jaramogi Diddy
+Project: Universal Blockchain Platform (UBP)
+Version: 2.0.0
 """
 
-from providers.alchemy import AlchemyProvider
+from typing import Optional, Dict, Any
+
 from core.logger import get_logger
+from providers.base import BaseProvider
+from providers.alchemy import AlchemyProvider
+
 
 logger = get_logger(__name__)
 
 
 class ProviderFactory:
     """
-    Factory responsible for creating blockchain providers.
+    Factory for creating blockchain providers.
     """
 
-    @staticmethod
-    def get_provider():
+    _providers = {
+        "alchemy": AlchemyProvider,
+        # "infura": InfuraProvider,
+        # "quicknode": QuickNodeProvider,
+        # "ankr": AnkrProvider,
+        # "local": LocalProvider,
+    }
+
+    @classmethod
+    def create_provider(
+        cls,
+        provider_type: str,
+        api_key: Optional[str] = None,
+        network: str = "mainnet",
+        **kwargs
+    ) -> BaseProvider:
         """
-        Create and return the configured blockchain provider.
+        Create a provider instance.
+
+        Parameters
+        ----------
+        provider_type : str
+            Type of provider ('alchemy', 'infura', etc.).
+        api_key : str, optional
+            API key for the provider.
+        network : str, optional
+            Network to connect to.
+        **kwargs
+            Additional provider-specific arguments.
+
+        Returns
+        -------
+        BaseProvider
+            Provider instance.
+
+        Raises
+        ------
+        ValueError
+            If the provider type is not supported.
         """
+        provider_class = cls._providers.get(provider_type.lower())
 
-        logger.info("Creating Alchemy provider.")
+        if not provider_class:
+            raise ValueError(f"Unsupported provider type: {provider_type}")
 
-        provider = AlchemyProvider()
+        logger.info(f"Creating {provider_type} provider for {network}")
 
-        provider.connect()
+        return provider_class(api_key=api_key, network=network, **kwargs)
 
-        logger.info("Provider created successfully.")
+    @classmethod
+    def get_available_providers(cls) -> list:
+        """
+        Get list of available provider types.
 
-        return provider
+        Returns
+        -------
+        list
+            List of provider type names.
+        """
+        return list(cls._providers.keys())
+
+    @classmethod
+    def register_provider(cls, name: str, provider_class: type) -> None:
+        """
+        Register a new provider type.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
+        provider_class : type
+            Provider class.
+        """
+        cls._providers[name.lower()] = provider_class
+        logger.info(f"Registered provider: {name}")

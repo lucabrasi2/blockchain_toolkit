@@ -1,27 +1,28 @@
 """
 Universal Blockchain Platform (UBP)
 
-Version : 0.8.0
-Module  : Alchemy Provider
-Author  : jaramogi Diddy
+Module:
+    Alchemy Provider
 
-Provides Ethereum connectivity through the Alchemy API.
+Purpose:
+    Alchemy blockchain provider implementation.
+
+Responsibilities:
+    • Provide Alchemy RPC endpoints
+    • Handle Alchemy API keys
+    • Manage Alchemy connections
+    • Support HTTP and WebSocket
+
+Author: Jaramogi Diddy
+Project: Universal Blockchain Platform (UBP)
+Version: 2.0.0
 """
 
-from web3 import Web3
-
-from config.settings import (
-    ALCHEMY_HTTP_URL,
-    validate_settings,
-)
-
-from providers.base import BaseProvider
-
-from exceptions.blockchain_exceptions import (
-    BlockchainConnectionError,
-)
+import os
+from typing import Optional, Dict, Any
 
 from core.logger import get_logger
+from providers.base import BaseProvider
 
 
 logger = get_logger(__name__)
@@ -29,54 +30,68 @@ logger = get_logger(__name__)
 
 class AlchemyProvider(BaseProvider):
     """
-    Ethereum provider backed by Alchemy.
+    Alchemy blockchain provider.
     """
 
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None, network: str = "mainnet"):
         """
-        Initialize the provider.
+        Initialize the Alchemy provider.
+
+        Parameters
+        ----------
+        api_key : str, optional
+            Alchemy API key.
+        network : str, optional
+            Network to connect to.
         """
-        validate_settings()
+        self.api_key = api_key or os.getenv("ALCHEMY_API_KEY", "")
+        self.network = network
+        self._http_url = None
+        self._ws_url = None
 
-        self._web3 = None
+    @property
+    def name(self) -> str:
+        """Provider name."""
+        return "alchemy"
 
-    def connect(self) -> None:
+    @property
+    def http_url(self) -> str:
+        """HTTP RPC URL."""
+        if not self._http_url:
+            self._http_url = f"https://{self.network}.g.alchemy.com/v2/{self.api_key}"
+        return self._http_url
+
+    @property
+    def ws_url(self) -> str:
+        """WebSocket RPC URL."""
+        if not self._ws_url:
+            self._ws_url = f"wss://{self.network}.g.alchemy.com/v2/{self.api_key}"
+        return self._ws_url
+
+    def get_config(self) -> Dict[str, Any]:
         """
-        Establish a connection to Alchemy.
+        Get provider configuration.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Provider configuration.
         """
+        return {
+            "name": self.name,
+            "network": self.network,
+            "http_url": self.http_url,
+            "ws_url": self.ws_url,
+            "api_key": self.api_key[:8] + "..." if self.api_key else "",
+        }
 
-        logger.info("Connecting to Alchemy provider...")
-
-        self._web3 = Web3(
-            Web3.HTTPProvider(ALCHEMY_HTTP_URL)
-        )
-
-        if not self._web3.is_connected():
-
-            logger.error("Alchemy connection failed.")
-
-            raise BlockchainConnectionError(
-                "Unable to connect to the Alchemy provider."
-            )
-
-        logger.info("Connected to Alchemy successfully.")
-
-    def is_connected(self) -> bool:
+    def is_available(self) -> bool:
         """
-        Check whether the provider is connected.
+        Check if the provider is available.
+
+        Returns
+        -------
+        bool
+            True if the provider is available.
         """
-
-        if self._web3 is None:
-            return False
-
-        return self._web3.is_connected()
-
-    def get_web3(self) -> Web3:
-        """
-        Return the active Web3 instance.
-        """
-
-        if self._web3 is None:
-            self.connect()
-
-        return self._web3
+        return bool(self.api_key) and self.api_key != "YOUR_ALCHEMY_API_KEY"
