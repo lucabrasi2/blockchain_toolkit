@@ -1,126 +1,66 @@
 """
 Universal Blockchain Platform (UBP)
 
-Module:
-    Bitcoin Controller
+Version : 1.3.0
+Module  : Bitcoin Controller
+Author  : Jaramogi Diddy
 
-Purpose:
-    Handle Bitcoin-related operations and coordinate
-    between the user interface and Bitcoin services.
-
-Responsibilities:
-    • Validate Bitcoin input
-    • Coordinate Bitcoin services
-    • Handle exceptions
-    • Call display modules
-
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Controller for Bitcoin-related operations.
 """
 
 from typing import Dict, Any, Optional
 
 from core.logger import get_logger
-from core.display import print_error, print_info
-
-# Import Bitcoin services when they're implemented
-# from services.bitcoin.wallet_service import BitcoinWalletService
-# from services.bitcoin.block_service import BitcoinBlockService
-# from services.bitcoin.transaction_service import BitcoinTransactionService
-
+from services.bitcoin import (
+    BitcoinWalletService,
+    BitcoinBlockService,
+    BitcoinTransactionService,
+)
 
 logger = get_logger(__name__)
 
 
 class BitcoinController:
     """
-    Bitcoin Controller for handling
-    Bitcoin blockchain interactions.
+    Bitcoin Controller for handling blockchain interactions.
     """
 
     def __init__(self):
         """Initialize the Bitcoin Controller."""
-        # self.wallet_service = BitcoinWalletService()
-        # self.block_service = BitcoinBlockService()
-        # self.transaction_service = BitcoinTransactionService()
-        logger.info("BitcoinController initialized (placeholder).")
-        print_info("Bitcoin module is under development.")
+        self.wallet_service = BitcoinWalletService()
+        self.block_service = BitcoinBlockService()
+        self.transaction_service = BitcoinTransactionService()
+        logger.info("BitcoinController initialized.")
 
     def wallet_inspector(self, address: str) -> Dict[str, Any]:
-        """
-        Inspect a Bitcoin wallet address.
+        """Inspect a Bitcoin wallet address."""
+        try:
+            logger.info(f"Inspecting Bitcoin wallet: {address}")
+            report = self.wallet_service.get_wallet_report(address)
+            logger.info("Bitcoin wallet inspection completed successfully.")
+            return report
+        except Exception as error:
+            logger.error(f"Unexpected wallet inspector error: {error}")
+            raise
 
-        Parameters
-        ----------
-        address : str
-            Bitcoin wallet address.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Wallet inspection report.
-        """
-        logger.info(f"Inspecting Bitcoin wallet: {address}")
-
-        # Placeholder implementation
-        return {
-            "address": address,
-            "balance_btc": 0.0,
-            "balance_satoshis": 0,
-            "transaction_count": 0,
-            "is_contract": False,
-            "classification": "Bitcoin Address",
-            "message": "Bitcoin module coming soon!",
-        }
-
-    def block_explorer(self, block_number: int) -> Dict[str, Any]:
-        """
-        Explore a Bitcoin block.
-
-        Parameters
-        ----------
-        block_number : int
-            Bitcoin block number.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Block exploration report.
-        """
-        logger.info(f"Exploring Bitcoin block: {block_number}")
-
-        # Placeholder implementation
-        return {
-            "number": block_number,
-            "hash": "N/A",
-            "timestamp": "N/A",
-            "transaction_count": 0,
-            "message": "Bitcoin module coming soon!",
-        }
+    def block_explorer(self, block_identifier) -> Dict[str, Any]:
+        """Explore a Bitcoin block."""
+        try:
+            logger.info(f"Exploring Bitcoin block: {block_identifier}")
+            report = self.block_service.get_block_report(block_identifier)
+            logger.info("Bitcoin block exploration completed successfully.")
+            return report
+        except Exception as error:
+            logger.error(f"Unexpected block explorer error: {error}")
+            raise
 
     def transaction_analyzer(self, tx_hash: str) -> Dict[str, Any]:
-        """
-        Analyze a Bitcoin transaction.
-
-        Parameters
-        ----------
-        tx_hash : str
-            Bitcoin transaction hash.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Transaction analysis report.
-        """
-        logger.info(f"Analyzing Bitcoin transaction: {tx_hash}")
-
-        # Placeholder implementation
-        return {
-            "hash": tx_hash,
-            "from": "N/A",
-            "to": "N/A",
-            "value": 0.0,
-            "status": False,
-            "message": "Bitcoin module coming soon!",
-        }
+        """Analyze a Bitcoin transaction."""
+        try:
+            logger.info(f"Analyzing Bitcoin transaction: {tx_hash}")
+            report = self.transaction_service.get_transaction_report(tx_hash)
+            logger.info("Bitcoin transaction analysis completed successfully.")
+            return report
+        except Exception as error:
+            logger.error(f"Unexpected transaction analyzer error: {error}")
+            raise

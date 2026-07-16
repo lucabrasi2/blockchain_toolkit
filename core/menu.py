@@ -19,8 +19,6 @@ Project: Universal Blockchain Platform (UBP)
 Version: 2.0.0
 """
 
-from typing import Optional, Tuple
-
 from core.display.utils import (
     clear_screen,
     print_header,
@@ -98,15 +96,17 @@ class EthereumMenu:
         print("  3. 💱 Inspect Token")
         print("  4. 🔍 Explore Block")
         print("  5. 📊 Analyze Transaction")
-        print("  6. 🔙 Back to Main Menu")
+        print("  6. 🖥️  Validate Node")
+        print("  7. 🔄 Compare Nodes")
+        print("  8. 🔙 Back to Main Menu")
         print_divider("-", 40)
 
-        return input("\nEnter your choice (1-6): ").strip()
+        return input("\nEnter your choice (1-8): ").strip()
 
     @staticmethod
     def invalid_choice() -> None:
         """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-6.")
+        print_error("Invalid choice. Please enter 1-8.")
         input("\nPress Enter to continue...")
 
 
@@ -170,17 +170,15 @@ class TronMenu:
         print("  1. 👛 Inspect Wallet")
         print("  2. 📄 Inspect Contract")
         print("  3. 💱 Inspect Token")
-        print("  4. 🔍 Explore Block")
-        print("  5. 📊 Analyze Transaction")
-        print("  6. 🔙 Back to Main Menu")
+        print("  4. 🔙 Back to Main Menu")
         print_divider("-", 40)
 
-        return input("\nEnter your choice (1-6): ").strip()
+        return input("\nEnter your choice (1-4): ").strip()
 
     @staticmethod
     def invalid_choice() -> None:
         """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-6.")
+        print_error("Invalid choice. Please enter 1-4.")
         input("\nPress Enter to continue...")
 
 
@@ -245,21 +243,18 @@ class HelpMenu:
         print()
 
         print("🛠️  FEATURES")
-        print("  • Wallet Inspection")
-        print("  • Contract Analysis")
-        print("  • Token Information")
-        print("  • Block Exploration")
-        print("  • Transaction Analysis")
-        print("  • Multi-chain Support")
+        print("  • Wallet Inspection (Ethereum, Bitcoin, TRON)")
+        print("  • Contract Analysis (Ethereum, TRON)")
+        print("  • Token Information (ERC-20, TRC-20)")
+        print("  • Block Exploration (Ethereum, Bitcoin)")
+        print("  • Transaction Analysis (Ethereum, Bitcoin)")
+        print("  • Node Validation & Comparison")
         print()
 
         print("⛓️  SUPPORTED BLOCKCHAINS")
         print("  • 🟣 Ethereum (Mainnet, Goerli, Sepolia)")
-        print("  • 🟠 Bitcoin (Coming soon)")
-        print("  • 🔴 TRON (Coming soon)")
-        print("  • Polygon (Coming soon)")
-        print("  • Arbitrum (Coming soon)")
-        print("  • Optimism (Coming soon)")
+        print("  • 🟠 Bitcoin (Mainnet)")
+        print("  • 🔴 TRON (Mainnet)")
         print()
 
         print("🔌 PROVIDER SUPPORT")
@@ -289,76 +284,7 @@ class HelpMenu:
         input("Press Enter to continue...")
 
 
-class MenuFactory:
-    """
-    Factory class for menu creation.
-    """
-
-    @staticmethod
-    def get_menu(blockchain: str) -> object:
-        """
-        Get the appropriate menu for a blockchain.
-
-        Parameters
-        ----------
-        blockchain : str
-            Blockchain name ('ethereum', 'bitcoin', 'tron').
-
-        Returns
-        -------
-        object
-            Menu class instance.
-        """
-        menus = {
-            "ethereum": EthereumMenu,
-            "bitcoin": BitcoinMenu,
-            "tron": TronMenu,
-        }
-        return menus.get(blockchain.lower(), EthereumMenu)
-
-    @staticmethod
-    def get_menu_options(blockchain: str) -> dict:
-        """
-        Get menu options for a blockchain.
-
-        Parameters
-        ----------
-        blockchain : str
-            Blockchain name.
-
-        Returns
-        -------
-        dict
-            Menu options mapping.
-        """
-        options = {
-            "ethereum": {
-                "1": "wallet",
-                "2": "contract",
-                "3": "token",
-                "4": "block",
-                "5": "transaction",
-                "6": "back",
-            },
-            "bitcoin": {
-                "1": "wallet",
-                "2": "block",
-                "3": "transaction",
-                "4": "back",
-            },
-            "tron": {
-                "1": "wallet",
-                "2": "contract",
-                "3": "token",
-                "4": "block",
-                "5": "transaction",
-                "6": "back",
-            },
-        }
-        return options.get(blockchain.lower(), {})
-
-
-# Backward compatibility with existing code
+# Backward compatibility
 def main_menu():
     """Legacy function for backward compatibility."""
     return MainMenu.display()

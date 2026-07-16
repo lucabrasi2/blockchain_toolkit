@@ -7,6 +7,10 @@ Module:
 Purpose:
     Centralized access to all display
     modules in the platform.
+
+Author: Jaramogi Diddy
+Project: Universal Blockchain Platform (UBP)
+Version: 2.0.0
 """
 
 from core.display.utils import (
@@ -34,6 +38,7 @@ from core.display.token_display import TokenDisplay
 from core.display.block_display import BlockDisplay
 from core.display.transaction_display import TransactionDisplay
 from core.display.network_display import NetworkDisplay
+from core.display.node_display import NodeDisplay
 
 
 __all__ = [
@@ -61,4 +66,5 @@ __all__ = [
     "BlockDisplay",
     "TransactionDisplay",
     "NetworkDisplay",
+    "NodeDisplay",
 ]
