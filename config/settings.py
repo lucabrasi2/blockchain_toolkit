@@ -1,267 +1,421 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Module:
-    Settings Configuration
+Module
+------
+config.settings
 
-Purpose:
-    Manage application configuration and
-    environment settings for the UBP platform.
+Purpose
+-------
+Central configuration management for UBP.
 
-Responsibilities:
-    • Load environment variables
-    • Provide configuration defaults
-    • Manage network settings
-    • Manage provider settings
-    • Validate configuration
+Loads environment variables and exposes
+typed application settings.
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Architecture
+------------
+UBP Enterprise Configuration Framework
+
+
+Author
+------
+Jaramogi Diddy
+
+
+Platform
+--------
+Universal Blockchain Platform (UBP)
+
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
 
+
+from __future__ import annotations
+
+
 import os
-from typing import Optional, Dict, Any
+
+from pathlib import Path
+
 from dotenv import load_dotenv
 
+
 from core.logger import get_logger
+
 
 
 logger = get_logger(__name__)
 
 
+
+
+###############################################################################
+# Environment Loading
+###############################################################################
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+
+ENV_FILE = BASE_DIR / ".env"
+
+
+
+if ENV_FILE.exists():
+
+    load_dotenv(
+        ENV_FILE
+    )
+
+    logger.info(
+        "Environment configuration loaded."
+    )
+
+else:
+
+    logger.warning(
+        ".env file not found."
+    )
+
+
+
+
+###############################################################################
+# Application Settings
+###############################################################################
+
+
 class Settings:
     """
-    Application settings manager.
+    Global UBP configuration.
+
+    All modules should import settings
+    from this class instead of reading
+    environment variables directly.
     """
 
-    def __init__(self, env_file: str = ".env"):
+
+
+    ###########################################################################
+    # Application
+    ###########################################################################
+
+
+    APP_NAME: str = os.getenv(
+        "APP_NAME",
+        "Universal_Blockchain_Platform",
+    )
+
+
+    APP_ENV: str = os.getenv(
+        "APP_ENV",
+        "development",
+    )
+
+
+    APP_DEBUG: bool = (
+        os.getenv(
+            "APP_DEBUG",
+            "false",
+        ).lower()
+        == "true"
+    )
+
+
+    APP_VERSION: str = os.getenv(
+        "APP_VERSION",
+        "2.0",
+    )
+    
+    ###########################################################################
+    # Logging Configuration
+    ###########################################################################
+
+    LOG_LEVEL: str = os.getenv(
+        "LOG_LEVEL",
+        "INFO",
+    )
+
+
+
+    ###########################################################################
+    # Alchemy Configuration
+    ###########################################################################
+
+    ALCHEMY_API_KEY: str = os.getenv(
+        "ALCHEMY_API_KEY",
+        "",
+    )
+
+
+    ALCHEMY_NETWORK: str = os.getenv(
+        "ALCHEMY_NETWORK",
+        "eth-mainnet",
+    )
+
+
+
+    ###########################################################################
+    # Infura Configuration
+    ###########################################################################
+
+    INFURA_PROJECT_ID: str = os.getenv(
+        "INFURA_PROJECT_ID",
+        "",
+    )
+
+
+    INFURA_NETWORK: str = os.getenv(
+        "INFURA_NETWORK",
+        "mainnet",
+    )
+
+
+
+    ###########################################################################
+    # Provider Manager Configuration
+    ###########################################################################
+
+    PRIMARY_PROVIDER: str = os.getenv(
+        "PRIMARY_PROVIDER",
+        "alchemy",
+    )
+
+
+    BACKUP_PROVIDER: str = os.getenv(
+        "BACKUP_PROVIDER",
+        "infura",
+    )
+
+
+
+    AUTO_FAILOVER: bool = (
+        os.getenv(
+            "AUTO_FAILOVER",
+            "true",
+        ).lower()
+        == "true"
+    )
+
+
+
+    HEALTH_CHECK_INTERVAL: int = int(
+        os.getenv(
+            "HEALTH_CHECK_INTERVAL",
+            "60",
+        )
+    )
+
+
+
+    ###########################################################################
+    # Ethereum Configuration
+    ###########################################################################
+
+    ETH_CHAIN_ID: int = int(
+        os.getenv(
+            "ETH_CHAIN_ID",
+            "1",
+        )
+    )
+
+
+    ETH_CONFIRMATIONS: int = int(
+        os.getenv(
+            "ETH_CONFIRMATIONS",
+            "12",
+        )
+    )
+    
+    ###########################################################################
+    # Database Configuration
+    ###########################################################################
+
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///ubp.db",
+    )
+
+
+
+    ###########################################################################
+    # Security Configuration
+    ###########################################################################
+
+    SECRET_KEY: str = os.getenv(
+        "SECRET_KEY",
+        "",
+    )
+
+
+    JWT_SECRET: str = os.getenv(
+        "JWT_SECRET",
+        "",
+    )
+
+
+    JWT_EXPIRATION_MINUTES: int = int(
+        os.getenv(
+            "JWT_EXPIRATION_MINUTES",
+            "60",
+        )
+    )
+
+
+
+    ###########################################################################
+    # Web Server Configuration
+    ###########################################################################
+
+    HOST: str = os.getenv(
+        "HOST",
+        "0.0.0.0",
+    )
+
+
+    PORT: int = int(
+        os.getenv(
+            "PORT",
+            "8000",
+        )
+    )
+
+
+
+    ###########################################################################
+    # WebSocket Configuration
+    ###########################################################################
+
+    ENABLE_WEBSOCKETS: bool = (
+        os.getenv(
+            "ENABLE_WEBSOCKETS",
+            "true",
+        ).lower()
+        == "true"
+    )
+
+
+
+    ###########################################################################
+    # Development Configuration
+    ###########################################################################
+
+    ENABLE_TEST_MODE: bool = (
+        os.getenv(
+            "ENABLE_TEST_MODE",
+            "false",
+        ).lower()
+        == "true"
+    )
+
+
+
+    ###########################################################################
+    # Validation
+    ###########################################################################
+
+    @classmethod
+    def validate(cls) -> bool:
         """
-        Initialize settings from environment variables.
-
-        Parameters
-        ----------
-        env_file : str, optional
-            Path to the .env file.
-        """
-        self.env_file = env_file
-        self._load_env()
-        self._initialize_settings()
-
-    def _load_env(self) -> None:
-        """Load environment variables from .env file."""
-        try:
-            if os.path.exists(self.env_file):
-                load_dotenv(self.env_file)
-                logger.info(f"Loaded environment from {self.env_file}")
-            else:
-                logger.warning(f"{self.env_file} not found. Using defaults.")
-        except Exception as error:
-            logger.error(f"Error loading environment: {error}")
-
-    def _initialize_settings(self) -> None:
-        """Initialize all settings with defaults or environment values."""
-        # Network Settings
-        self.network = os.getenv("NETWORK", "mainnet")
-        self.chain_id = int(os.getenv("CHAIN_ID", "1"))
-        
-        # RPC Settings
-        self.rpc_url = os.getenv("ETHEREUM_RPC_URL", "https://mainnet.infura.io/v3/YOUR_INFURA_KEY")
-        self.rpc_timeout = int(os.getenv("RPC_TIMEOUT", "30"))
-        self.rpc_retries = int(os.getenv("RPC_RETRIES", "3"))
-        
-        # Provider Settings
-        self.provider = os.getenv("PROVIDER", "auto")
-        self.provider_api_key = os.getenv("PROVIDER_API_KEY", "")
-        
-        # Database Settings
-        self.database_url = os.getenv("DATABASE_URL", "sqlite:///ubp.db")
-        self.database_pool_size = int(os.getenv("DATABASE_POOL_SIZE", "5"))
-        
-        # Logging Settings
-        self.log_level = os.getenv("LOG_LEVEL", "INFO")
-        self.log_file = os.getenv("LOG_FILE", "logs/ubp.log")
-        
-        # Application Settings
-        self.debug = os.getenv("DEBUG", "False").lower() == "true"
-        self.environment = os.getenv("ENVIRONMENT", "development")
-        
-        # Security Settings
-        self.secret_key = os.getenv("SECRET_KEY", "change-me-in-production")
-        self.encryption_enabled = os.getenv("ENCRYPTION_ENABLED", "False").lower() == "true"
-        
-        logger.info("Settings initialized successfully.")
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """
-        Get a setting by key.
-
-        Parameters
-        ----------
-        key : str
-            Setting key.
-        default : Any, optional
-            Default value if key doesn't exist.
-
-        Returns
-        -------
-        Any
-            Setting value.
-        """
-        return getattr(self, key, default)
-
-    def set(self, key: str, value: Any) -> None:
-        """
-        Set a setting by key.
-
-        Parameters
-        ----------
-        key : str
-            Setting key.
-        value : Any
-            Setting value.
-        """
-        setattr(self, key, value)
-        logger.debug(f"Set {key} = {value}")
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert settings to dictionary.
-
-        Returns
-        -------
-        Dict[str, Any]
-            All settings as a dictionary.
-        """
-        return {
-            "network": self.network,
-            "chain_id": self.chain_id,
-            "rpc_url": self.rpc_url,
-            "rpc_timeout": self.rpc_timeout,
-            "rpc_retries": self.rpc_retries,
-            "provider": self.provider,
-            "provider_api_key": self.provider_api_key,
-            "database_url": self.database_url,
-            "database_pool_size": self.database_pool_size,
-            "log_level": self.log_level,
-            "log_file": self.log_file,
-            "debug": self.debug,
-            "environment": self.environment,
-            "secret_key": self.secret_key,
-            "encryption_enabled": self.encryption_enabled,
-        }
-
-    def validate(self) -> bool:
-        """
-        Validate settings.
+        Validate required configuration.
 
         Returns
         -------
         bool
-            True if all settings are valid.
+            True if configuration is usable.
         """
-        valid = True
 
-        # Validate network
-        valid_networks = ["mainnet", "goerli", "sepolia", "local", "main", "testnet", "dev"]
-        if self.network not in valid_networks:
-            logger.warning(f"Unknown network: {self.network}")
-            valid = False
 
-        # Validate RPC URL
-        if not self.rpc_url or self.rpc_url == "https://mainnet.infura.io/v3/YOUR_INFURA_KEY":
-            logger.warning("RPC URL not set or using default placeholder.")
-            valid = False
+        required = [
 
-        # Validate timeout
-        if self.rpc_timeout < 1 or self.rpc_timeout > 300:
-            logger.warning(f"Invalid RPC timeout: {self.rpc_timeout}")
-            valid = False
+            "APP_NAME",
 
-        return valid
+            "APP_ENV",
 
-    def get_network_config(self) -> Dict[str, Any]:
+        ]
+
+
+        for item in required:
+
+            if not getattr(
+                cls,
+                item,
+                None,
+            ):
+
+                logger.error(
+                    "Missing configuration: %s",
+                    item,
+                )
+
+                return False
+
+
+
+        logger.info(
+            "Configuration validation successful."
+        )
+
+
+        return True
+
+
+
+    ###########################################################################
+    # Information Export
+    ###########################################################################
+
+    @classmethod
+    def info(cls) -> dict:
         """
-        Get network-specific configuration.
+        Return safe configuration information.
 
-        Returns
-        -------
-        Dict[str, Any]
-            Network configuration.
+        Secrets are excluded.
         """
-        network_configs = {
-            "mainnet": {
-                "chain_id": 1,
-                "name": "Ethereum Mainnet",
-                "currency": "ETH",
-                "explorer": "https://etherscan.io",
-            },
-            "goerli": {
-                "chain_id": 5,
-                "name": "Goerli Testnet",
-                "currency": "ETH",
-                "explorer": "https://goerli.etherscan.io",
-            },
-            "sepolia": {
-                "chain_id": 11155111,
-                "name": "Sepolia Testnet",
-                "currency": "ETH",
-                "explorer": "https://sepolia.etherscan.io",
-            },
-            "local": {
-                "chain_id": 1337,
-                "name": "Local Network",
-                "currency": "ETH",
-                "explorer": "http://localhost:8545",
-            },
+
+        return {
+
+            "app_name":
+                cls.APP_NAME,
+
+            "environment":
+                cls.APP_ENV,
+
+            "version":
+                cls.APP_VERSION,
+
+            "primary_provider":
+                cls.PRIMARY_PROVIDER,
+
+            "backup_provider":
+                cls.BACKUP_PROVIDER,
+
+            "auto_failover":
+                cls.AUTO_FAILOVER,
+
+            "websocket_enabled":
+                cls.ENABLE_WEBSOCKETS,
+
         }
-        return network_configs.get(self.network, network_configs["mainnet"])
-
-    def get_provider_config(self) -> Dict[str, Any]:
-        """
-        Get provider-specific configuration.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Provider configuration.
-        """
-        provider_configs = {
-            "alchemy": {
-                "url_template": "https://{network}.g.alchemy.com/v2/{api_key}",
-                "websocket_template": "wss://{network}.g.alchemy.com/v2/{api_key}",
-            },
-            "infura": {
-                "url_template": "https://{network}.infura.io/v3/{api_key}",
-                "websocket_template": "wss://{network}.infura.io/ws/v3/{api_key}",
-            },
-            "quicknode": {
-                "url_template": "https://{network}.quicknode.com/v1/{api_key}",
-                "websocket_template": "wss://{network}.quicknode.com/v1/{api_key}",
-            },
-            "ankr": {
-                "url_template": "https://rpc.ankr.com/{network}/{api_key}",
-                "websocket_template": "wss://rpc.ankr.com/{network}/{api_key}",
-            },
-            "local": {
-                "url_template": "http://localhost:8545",
-                "websocket_template": "ws://localhost:8545",
-            },
-        }
-        return provider_configs.get(self.provider, provider_configs["local"])
 
 
-# For backward compatibility
+
+
+###############################################################################
+# Global Settings Instance
+###############################################################################
+
+
 settings = Settings()
 
 
-def get_settings() -> Settings:
-    """
-    Get the application settings instance.
 
-    Returns
-    -------
-    Settings
-        Settings instance.
-    """
-    return settings
+###############################################################################
+# End of File
+###############################################################################

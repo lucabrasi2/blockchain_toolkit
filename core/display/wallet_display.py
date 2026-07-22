@@ -5,14 +5,7 @@ Module:
     Wallet Display
 
 Purpose:
-    Display Ethereum wallet information
-    for the Universal Blockchain Platform (UBP).
-
-Responsibilities:
-    • Display formatted wallet reports
-    • Show balance information
-    • Display transaction count
-    • Format wallet data for user-friendly output
+    Display wallet information for all blockchains.
 
 Author: Jaramogi Diddy
 Project: Universal Blockchain Platform (UBP)
@@ -36,47 +29,82 @@ from core.display.utils import (
 
 class WalletDisplay:
     """
-    Wallet report display formatter.
+    Wallet report display formatter for all blockchains.
     """
 
     @staticmethod
     def display_wallet_report(report: Dict[str, Any]) -> None:
         """
-        Display a formatted wallet report.
+        Display a formatted wallet report for any blockchain.
 
         Parameters
         ----------
         report : dict
-            Wallet inspection report containing:
-            - address: Wallet address
-            - balance_eth: Balance in ETH
-            - balance_wei: Balance in Wei
-            - nonce: Transaction nonce
-            - is_contract: Whether it's a contract
-            - classification: Address classification
-            - transaction_count: Total transactions
-            - token_balances: List of token balances
+            Wallet inspection report.
         """
-        print_header("👛 WALLET REPORT", "=", 60)
+        # Determine blockchain type from report
+        blockchain = report.get("blockchain", "Unknown")
+        classification = report.get("classification", "Unknown")
+        
+        # Set appropriate header emoji
+        if "Bitcoin" in classification or "BTC" in str(report.get("balance_btc", "")):
+            header = "🟠 BITCOIN WALLET REPORT"
+        elif "TRON" in classification or "TRX" in str(report.get("balance_trx", "")):
+            header = "🔴 TRON WALLET REPORT"
+        else:
+            header = "👛 WALLET REPORT"
+        
+        print_header(header, "=", 60)
 
         # Basic Information
         print_section("📌 Basic Information", "-", 40)
         print(f"  Address:          {format_address(report.get('address', 'N/A'))}")
         print(f"  Full Address:     {report.get('address', 'N/A')}")
-        print(f"  Is Contract:      {'✅ Yes' if report.get('is_contract') else '❌ No'}")
-        print(f"  Classification:   {report.get('classification', 'Unknown')}")
+        
+        # Show contract status if available
+        if "is_contract" in report:
+            print(f"  Is Contract:      {'✅ Yes' if report.get('is_contract') else '❌ No'}")
+        
+        print(f"  Classification:   {classification}")
         print()
 
-        # Balance Information
+        # Balance Information (blockchain-specific)
         print_section("💰 Balance Information", "-", 40)
-        print(f"  Balance (ETH):    {format_balance(report.get('balance_eth', 0))} ETH")
-        print(f"  Balance (WEI):    {format_wei(report.get('balance_wei', 0))} WEI")
+        
+        # Check for Bitcoin
+        if "balance_btc" in report:
+            print(f"  Balance (BTC):    {format_balance(report.get('balance_btc', 0))} BTC")
+            print(f"  Balance (Sats):   {report.get('balance_satoshis', 0):,} SATS")
+        
+        # Check for TRON
+        elif "balance_trx" in report:
+            print(f"  Balance (TRX):    {format_balance(report.get('balance_trx', 0))} TRX")
+            print(f"  Balance (SUN):    {report.get('balance_sun', 0):,} SUN")
+        
+        # Default to Ethereum
+        else:
+            print(f"  Balance (ETH):    {format_balance(report.get('balance_eth', 0))} ETH")
+            print(f"  Balance (WEI):    {format_wei(report.get('balance_wei', 0))} WEI")
+        
         print()
 
-        # Network Information
+        # Network Information (blockchain-specific)
         print_section("🔗 Network Information", "-", 40)
-        print(f"  Nonce:            {report.get('nonce', 0)}")
-        print(f"  Tx Count:         {report.get('transaction_count', 0)}")
+        
+        # Check for Bitcoin
+        if "balance_btc" in report:
+            print(f"  Tx Count:         {report.get('transaction_count', 0)}")
+        
+        # Check for TRON
+        elif "balance_trx" in report:
+            print(f"  Energy:           {report.get('energy', 0)}")
+            print(f"  Bandwidth:        {report.get('bandwidth', 0)}")
+        
+        # Default to Ethereum
+        else:
+            print(f"  Nonce:            {report.get('nonce', 0)}")
+            print(f"  Tx Count:         {report.get('transaction_count', 0)}")
+        
         print()
 
         # Token Balances
@@ -103,10 +131,20 @@ class WalletDisplay:
             Wallet inspection report.
         """
         address = report.get('address', 'N/A')
-        balance = report.get('balance_eth', 0)
         classification = report.get('classification', 'Unknown')
+        
+        # Determine blockchain type and balance
+        if "balance_btc" in report:
+            balance = report.get('balance_btc', 0)
+            symbol = "BTC"
+        elif "balance_trx" in report:
+            balance = report.get('balance_trx', 0)
+            symbol = "TRX"
+        else:
+            balance = report.get('balance_eth', 0)
+            symbol = "ETH"
 
-        print(f"👛 {format_address(address)} | {format_balance(balance)} ETH | {classification}")
+        print(f"👛 {format_address(address)} | {format_balance(balance)} {symbol} | {classification}")
 
     @staticmethod
     def display_balance_only(balance: Dict[str, Any], address: Optional[str] = None) -> None:
@@ -116,7 +154,7 @@ class WalletDisplay:
         Parameters
         ----------
         balance : dict
-            Balance information with 'ether' and 'wei' keys.
+            Balance information.
         address : str, optional
             Wallet address to display.
         """
@@ -125,36 +163,15 @@ class WalletDisplay:
         else:
             print_header("💰 BALANCE", "=", 40)
 
-        print(f"  ETH:  {format_balance(balance.get('ether', 0))}")
-        print(f"  WEI:  {format_wei(balance.get('wei', 0))}")
+        # Check for different blockchain types
+        if "btc" in balance or "satoshis" in balance:
+            print(f"  BTC:  {format_balance(balance.get('btc', 0))}")
+            print(f"  SATS: {balance.get('satoshis', 0):,}")
+        elif "trx" in balance or "sun" in balance:
+            print(f"  TRX:  {format_balance(balance.get('trx', 0))}")
+            print(f"  SUN:  {balance.get('sun', 0):,}")
+        else:
+            print(f"  ETH:  {format_balance(balance.get('ether', 0))}")
+            print(f"  WEI:  {format_wei(balance.get('wei', 0))}")
+        
         print()
-
-
-# Legacy function for backward compatibility
-def display_wallet_report(address: str, balance: Dict[str, Any], nonce: int) -> None:
-    """
-    Legacy function to display a formatted Ethereum wallet report.
-
-    This function is maintained for backward compatibility with
-    existing code that expects the old function signature.
-
-    Parameters
-    ----------
-    address : str
-        Ethereum wallet address.
-    balance : dict
-        Dictionary containing ETH and Wei balances.
-    nonce : int
-        Transaction count (nonce).
-    """
-    report = {
-        "address": address,
-        "balance_eth": balance.get("ether", 0),
-        "balance_wei": balance.get("wei", 0),
-        "nonce": nonce,
-        "is_contract": False,
-        "classification": "Unknown",
-        "transaction_count": nonce,
-        "token_balances": [],
-    }
-    WalletDisplay.display_wallet_report(report)

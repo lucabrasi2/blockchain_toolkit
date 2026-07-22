@@ -1,35 +1,105 @@
 """
-Universal Blockchain Platform (UBP)
+===============================================================================
+Universal Blockchain Platform
 
-Module:
-    Providers Package
+Module
+------
+providers.__init__
 
-Purpose:
-    Blockchain provider implementations.
-
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Public provider interface
+===============================================================================
 """
 
-from providers.base import BaseProvider
-from providers.alchemy import AlchemyProvider
-from providers.factory import ProviderFactory
-from providers.manager import (
-    ProviderManager,
-    get_provider_manager,
-    get_provider,
-    get_web3,
-    SimpleProvider,
+
+from providers.base import (
+    BaseProvider,
+    ProviderStatus,
+    ProviderType,
 )
 
+
+from providers.factory import (
+    ProviderFactory,
+)
+
+
+from providers.exceptions import (
+    ProviderError,
+    ProviderNotFoundError,
+    ProviderUnavailableError,
+    ProviderHealthCheckError,
+    ProviderConfigurationError,
+    ProviderValidationError,
+    ProviderUnsupportedOperationError,
+    ProviderConnectionError,
+    ProviderAuthenticationError,
+)
+
+
+def get_provider(
+    name: str | None = None,
+    *args,
+    **kwargs,
+):
+    """
+    Public provider accessor.
+    """
+
+    return ProviderFactory.get_provider(
+        name,
+        *args,
+        **kwargs,
+    )
+
+
+
+def get_web3(
+    name: str | None = None,
+):
+    """
+    Return Web3 instance from provider.
+
+    Used by ethereum services.
+    """
+
+    provider = get_provider(
+        name
+    )
+
+    return provider.web3
+
+
+
 __all__ = [
+
     "BaseProvider",
-    "AlchemyProvider",
+
+    "ProviderStatus",
+
+    "ProviderType",
+
     "ProviderFactory",
-    "ProviderManager",
-    "SimpleProvider",
-    "get_provider_manager",
+
     "get_provider",
+
     "get_web3",
+
+    "ProviderError",
+
+    "ProviderNotFoundError",
+
+    "ProviderUnavailableError",
+
+    "ProviderHealthCheckError",
+
+    "ProviderConfigurationError",
+
+    "ProviderValidationError",
+
+    "ProviderUnsupportedOperationError",
+
+    "ProviderConnectionError",
+
+    "ProviderAuthenticationError",
+
 ]
