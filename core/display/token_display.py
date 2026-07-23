@@ -48,20 +48,28 @@ class TokenDisplay:
         report : dict
             Token inspection report.
         """
+        if report.get("error"):
+            print_info(f"Error: {report.get('error')}")
+            return
+
         print_header("💱 TOKEN REPORT", "=", 60)
 
         # Basic Information
         print_section("📌 Basic Information", "-", 40)
         print(f"  Address:          {format_address(report.get('address', 'N/A'))}")
         print(f"  Full Address:     {report.get('address', 'N/A')}")
-        print(f"  Name:             {report.get('name', 'N/A')}")
-        print(f"  Symbol:           {report.get('symbol', 'N/A')}")
+        print(f"  Name:             {report.get('name', 'Unknown')}")
+        print(f"  Symbol:           {report.get('symbol', 'Unknown')}")
         print(f"  Decimals:         {report.get('decimals', 'N/A')}")
         print()
 
         # Supply Information
         print_section("📊 Supply Information", "-", 40)
-        print(f"  Total Supply:     {report.get('total_supply', 'N/A')}")
+        total_supply = report.get('total_supply', 'N/A')
+        if total_supply != 'N/A':
+            print(f"  Total Supply:     {total_supply:,}")
+        else:
+            print(f"  Total Supply:     N/A")
         print(f"  Circulating:      {report.get('circulating_supply', 'N/A')}")
         print()
 
@@ -72,20 +80,15 @@ class TokenDisplay:
             print(f"  Balance:          {format_balance(balance)}")
             print()
 
+        # Token status
+        if report.get('is_token', False):
+            print_success("✅ Token is valid and verified")
+        else:
+            print_info("⚠️  Token information may be incomplete")
+
         print_success("Token inspection completed successfully!")
 
-    @staticmethod
-    def display_token_summary(report: Dict[str, Any]) -> None:
-        """
-        Display a compact token summary.
 
-        Parameters
-        ----------
-        report : dict
-            Token inspection report.
-        """
-        name = report.get('name', 'Unknown')
-        symbol = report.get('symbol', 'N/A')
-        address = report.get('address', 'N/A')
-
-        print(f"💱 {symbol} ({name}) | {format_address(address)}")
+###############################################################################
+# End of File
+###############################################################################

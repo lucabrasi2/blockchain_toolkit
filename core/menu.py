@@ -71,20 +71,8 @@ class MainMenu:
 
 
 class EthereumMenu:
-    """
-    Ethereum blockchain menu.
-    """
-
     @staticmethod
     def display() -> str:
-        """
-        Display the Ethereum menu and get user choice.
-
-        Returns
-        -------
-        str
-            User's menu selection.
-        """
         clear_screen()
         print_header("🟣 ETHEREUM MODULE", "=", 60)
         print()
@@ -98,11 +86,12 @@ class EthereumMenu:
         print("  5. 📊 Analyze Transaction")
         print("  6. 🖥️  Validate Node")
         print("  7. 🔄 Compare Nodes")
-        print("  8. 🔙 Back to Main Menu")
+        print("  8. ⛽ Gas Price Optimization")
+        print("  9. 🔙 Back to Main Menu")
         print_divider("-", 40)
 
-        return input("\nEnter your choice (1-8): ").strip()
-
+        return input("\nEnter your choice (1-9): ").strip()
+    
     @staticmethod
     def invalid_choice() -> None:
         """Display invalid choice message."""

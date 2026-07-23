@@ -36,45 +36,66 @@ def get_transaction(tx_hash: str) -> Dict[str, Any]:
     """
     try:
         client = get_connection()
-        tx = client.get_transaction(tx_hash)
         
-        if "error" in tx:
-            return {"hash": tx_hash, "error": tx["error"]}
+        # Clean the hash - remove 0x prefix if present
+        if tx_hash.startswith('0x'):
+            tx_hash = tx_hash[2:]
         
-        vin = tx.get("vin", [])
-        vout = tx.get("vout", [])
+        result = client.get_transaction(tx_hash)
         
-        inputs = []
-        for inp in vin:
-            if "txid" in inp:
-                inputs.append(inp.get("txid"))
+        if "error" in result:
+            return {"hash": tx_hash, "error": result["error"]}
         
-        outputs = []
-        for out in vout:
-            address = out.get("scriptPubKey", {}).get("address")
-            if not address:
-                address = out.get("scriptPubKey", {}).get("addresses", [None])[0]
-            outputs.append({
-                "address": address,
-                "amount": out.get("value", 0),
+        # Extract data from the API response
+        # The blockchain.info API returns 'inputs' and 'outputs'
+        inputs = result.get("inputs", [])
+        outputs = result.get("outputs", [])
+        
+        # Format inputs
+        formatted_inputs = []
+        for inp in inputs:
+            prev_out = inp.get("prev_out", {})
+            formatted_inputs.append({
+                "hash": prev_out.get("hash"),
+                "index": prev_out.get("n"),
+                "value": prev_out.get("value", 0) / 100_000_000,
             })
         
+        # Format outputs
+        formatted_outputs = []
+        for out in outputs:
+            formatted_outputs.append({
+                "address": out.get("addr"),
+                "value": out.get("value", 0) / 100_000_000,
+            })
+        
+        # Get block height
+        block_height = result.get("block_height")
+        
+        # Calculate confirmations
+        confirmations = 0
+        if block_height:
+            # Use the client's latest block if available
+            latest = client.get_latest_block()
+            if latest and "number" in latest:
+                confirmations = latest.get("number", 0) - block_height + 1
+        
         return {
-            "hash": tx.get("txid"),
-            "block_hash": tx.get("blockhash"),
-            "block_number": tx.get("height", 0),
-            "confirmations": tx.get("confirmations", 0),
-            "timestamp": tx.get("time"),
-            "size": tx.get("size"),
-            "weight": tx.get("weight"),
-            "version": tx.get("version"),
-            "locktime": tx.get("locktime"),
-            "fee": tx.get("fee"),
+            "hash": result.get("hash"),
+            "block_hash": result.get("block_hash"),
+            "block_height": block_height,
+            "confirmations": confirmations,
+            "timestamp": result.get("timestamp"),
+            "size": result.get("size"),
+            "weight": result.get("weight"),
+            "version": result.get("version"),
+            "locktime": result.get("locktime"),
+            "fee": result.get("fee", 0),
             "inputs_count": len(inputs),
             "outputs_count": len(outputs),
-            "inputs": inputs[:5],
-            "outputs": outputs[:5],
-            "total_input": sum(o.get("amount", 0) for o in outputs),
+            "inputs": formatted_inputs[:5],
+            "outputs": formatted_outputs[:5],
+            "total_input": sum(o["value"] for o in formatted_outputs),
         }
         
     except Exception as error:
@@ -114,3 +135,8 @@ def get_transaction_status(tx_hash: str) -> str:
     except Exception as error:
         logger.error(f"Error getting transaction status: {error}")
         return "Unknown"
+
+
+###############################################################################
+# End of File
+###############################################################################

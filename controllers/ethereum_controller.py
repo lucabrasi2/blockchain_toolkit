@@ -1,24 +1,30 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Version : 1.3.0
-Module  : Ethereum Controller
-Author  : Jaramogi Diddy
+Module
+------
+controllers.ethereum_controller
 
-Controller for Ethereum-related operations.
+Purpose
+-------
+Ethereum controller for handling blockchain operations.
 
-Responsibilities:
-    • Validate user input
-    • Coordinate services
-    • Handle exceptions
-    • Call display modules
+Author
+------
+Jaramogi Diddy
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
 
-from typing import Optional, Dict, Any
+from typing import Dict, Any, Optional
 
 from core.logger import get_logger
 from services.ethereum.wallet_service import WalletService
@@ -27,15 +33,14 @@ from services.ethereum.token_service import TokenService
 from services.ethereum.block_service import BlockService
 from services.ethereum.transaction_service import TransactionService
 from services.ethereum.node_service import NodeService
-
+from services.ethereum.gas_service import GasService
 
 logger = get_logger(__name__)
 
 
 class EthereumController:
     """
-    Ethereum Controller for handling
-    blockchain interactions.
+    Ethereum Controller for handling blockchain interactions.
     """
 
     def __init__(self):
@@ -46,6 +51,7 @@ class EthereumController:
         self.block_service = BlockService()
         self.transaction_service = TransactionService()
         self.node_service = NodeService()
+        self.gas_service = GasService()
         logger.info("EthereumController initialized.")
 
     def wallet_inspector(self, address: str) -> Dict[str, Any]:
@@ -64,13 +70,9 @@ class EthereumController:
         """
         try:
             logger.info(f"Inspecting wallet: {address}")
-
-            # Get the wallet report
             report = self.wallet_service.get_wallet_report(address)
-
             logger.info("Wallet inspection completed successfully.")
             return report
-
         except Exception as error:
             logger.error(f"Unexpected wallet inspector error: {error}")
             raise
@@ -91,13 +93,9 @@ class EthereumController:
         """
         try:
             logger.info(f"Inspecting contract: {address}")
-
-            # Get the contract report
             report = self.contract_service.get_contract_report(address)
-
             logger.info("Contract inspection completed successfully.")
             return report
-
         except Exception as error:
             logger.error(f"Unexpected contract inspector error: {error}")
             raise
@@ -118,13 +116,9 @@ class EthereumController:
         """
         try:
             logger.info(f"Inspecting token: {address}")
-
-            # Get the token report
             report = self.token_service.get_token_report(address)
-
             logger.info("Token inspection completed successfully.")
             return report
-
         except Exception as error:
             logger.error(f"Unexpected token inspector error: {error}")
             raise
@@ -145,13 +139,9 @@ class EthereumController:
         """
         try:
             logger.info(f"Exploring block: {block_identifier}")
-
-            # Get the block report
             report = self.block_service.get_block_report(block_identifier)
-
             logger.info("Block exploration completed successfully.")
             return report
-
         except Exception as error:
             logger.error(f"Unexpected block explorer error: {error}")
             raise
@@ -172,13 +162,9 @@ class EthereumController:
         """
         try:
             logger.info(f"Analyzing transaction: {tx_hash}")
-
-            # Get the transaction report
             report = self.transaction_service.get_transaction_report(tx_hash)
-
             logger.info("Transaction analysis completed successfully.")
             return report
-
         except Exception as error:
             logger.error(f"Unexpected transaction analyzer error: {error}")
             raise
@@ -190,7 +176,7 @@ class EthereumController:
         Parameters
         ----------
         rpc_url : str, optional
-            RPC URL to validate. If None, validates current node.
+            RPC URL to validate.
 
         Returns
         -------
@@ -199,16 +185,12 @@ class EthereumController:
         """
         try:
             logger.info(f"Validating node: {rpc_url or 'default'}")
-
-            # Validate the node
             if rpc_url:
                 report = self.node_service.validate_node(rpc_url)
             else:
                 report = self.node_service.validate_current_node()
-
             logger.info("Node validation completed successfully.")
             return report
-
         except Exception as error:
             logger.error(f"Unexpected node validator error: {error}")
             raise
@@ -229,13 +211,32 @@ class EthereumController:
         """
         try:
             logger.info(f"Comparing {len(node_urls)} nodes")
-
-            # Compare the nodes
             report = self.node_service.compare_nodes(node_urls)
-
             logger.info("Node comparison completed successfully.")
             return report
-
         except Exception as error:
             logger.error(f"Unexpected node comparison error: {error}")
             raise
+
+    def gas_optimizer(self) -> Dict[str, Any]:
+        """
+        Get gas price optimization report.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Gas optimization report.
+        """
+        try:
+            logger.info("Getting gas optimization report")
+            report = self.gas_service.get_gas_report()
+            logger.info("Gas optimization completed successfully.")
+            return report
+        except Exception as error:
+            logger.error(f"Unexpected gas optimizer error: {error}")
+            raise
+
+
+###############################################################################
+# End of File
+###############################################################################

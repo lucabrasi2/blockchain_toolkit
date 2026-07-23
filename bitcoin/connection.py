@@ -32,7 +32,6 @@ class BitcoinClient:
     def get_latest_block(self) -> Dict[str, Any]:
         """Get the latest block."""
         try:
-            # Get latest block info
             response = requests.get(f"{self.base_url}/latestblock", timeout=10)
             data = response.json()
             
@@ -48,7 +47,6 @@ class BitcoinClient:
     def get_block(self, block_identifier: Any) -> Dict[str, Any]:
         """Get block by height or hash."""
         try:
-            # If it's a number, get block by height
             if isinstance(block_identifier, int) or (isinstance(block_identifier, str) and block_identifier.isdigit()):
                 response = requests.get(f"{self.base_url}/block-height/{block_identifier}?format=json", timeout=10)
                 data = response.json()
@@ -59,7 +57,6 @@ class BitcoinClient:
             else:
                 block_hash = block_identifier
             
-            # Get full block details
             response = requests.get(f"{self.base_url}/rawblock/{block_hash}", timeout=10)
             block = response.json()
             
@@ -124,6 +121,7 @@ class BitcoinClient:
                 "weight": data.get("weight"),
                 "version": data.get("ver"),
                 "locktime": data.get("lock_time"),
+                "fee": data.get("fee"),
                 "inputs": data.get("inputs", []),
                 "outputs": data.get("out", []),
             }
