@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ethereum - UBP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e17;
+            color: #e0e6ed;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1f2e, #0d1220);
+            padding: 20px 40px;
+            border-bottom: 1px solid #2a3a5a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .version { color: #6a7a8e; font-size: 14px; }
+        .nav {
+            display: flex;
+            gap: 20px;
+            background: #141b2b;
+            padding: 12px 40px;
+            border-bottom: 1px solid #1e2a3e;
+        }
+        .nav a {
+            color: #8a9aae;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s;
+            font-size: 15px;
+        }
+        .nav a:hover { background: #1e2a3e; color: #e0e6ed; }
+        .nav a.active { background: #6c5ce7; color: white; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px; }
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 28px;
+            margin-bottom: 24px;
+        }
+        .page-title .emoji { font-size: 36px; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: #141b2b;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #1e2a3e;
+        }
+        .card h3 {
+            font-size: 16px;
+            color: #8a9aae;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card input, .card textarea {
+            width: 100%;
+            padding: 10px 14px;
+            background: #0d1422;
+            border: 1px solid #1e2a3e;
+            border-radius: 8px;
+            color: #e0e6ed;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            margin-bottom: 8px;
+        }
+        .card input:focus, .card textarea:focus {
+            outline: none;
+            border-color: #6c5ce7;
+        }
+        .card textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .btn {
+            background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: opacity 0.3s;
+            width: 100%;
+        }
+        .btn:hover { opacity: 0.85; }
+        .result {
+            margin-top: 12px;
+            padding: 12px;
+            background: #0d1422;
+            border-radius: 8px;
+            border: 1px solid #1e2a3e;
+            font-size: 12px;
+            max-height: 250px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            color: #aab8c9;
+        }
+        .result .success { color: #00b894; }
+        .result .error { color: #ef4444; }
+        .btn-bitcoin { background: linear-gradient(135deg, #f7931a, #e6841a); }
+        .btn-tron { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #4a5a6e;
+            font-size: 13px;
+            border-top: 1px solid #1a1f2e;
+            margin-top: 30px;
+        }
+        .loading { color: #6a7a8e; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌐 Universal Blockchain Platform</h1>
+        <span class="version">v2.0.0</span>
+    </div>
+    <div class="nav">
+        <a href="/">Home</a>
+        <a href="/ethereum" class="active">🟣 Ethereum</a>
+        <a href="/bitcoin">🟠 Bitcoin</a>
+        <a href="/tron">🔴 TRON</a>
+    </div>
+
+    <div class="container">
+        <div class="page-title">
+            <span class="emoji">🟣</span>
+            Ethereum
+        </div>
+
+        <div class="grid">
+            <!-- Wallet -->
+            <div class="card">
+                <h3>👛 Wallet Inspection</h3>
+                <input type="text" id="eth-wallet" value="0x742d35Cc6634C0532925a3b844Bc454e4438f44e">
+                <button class="btn" onclick="inspectEthWallet()">Inspect Wallet</button>
+                <div id="eth-wallet-result" class="result">Ready</div>
+            </div>
+
+            <!-- Contract -->
+            <div class="card">
+                <h3>📄 Contract Inspection</h3>
+                <input type="text" id="eth-contract" value="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48">
+                <button class="btn" onclick="inspectEthContract()">Inspect Contract</button>
+                <div id="eth-contract-result" class="result">Ready</div>
+            </div>
+
+            <!-- Token -->
+            <div class="card">
+                <h3>💱 Token Inspection</h3>
+                <input type="text" id="eth-token" value="0x6B175474E89094C44Da98b954EedeAC495271d0F">
+                <button class="btn" onclick="inspectEthToken()">Inspect Token</button>
+                <div id="eth-token-result" class="result">Ready</div>
+            </div>
+
+            <!-- Block -->
+            <div class="card">
+                <h3>🔍 Block Exploration</h3>
+                <input type="text" id="eth-block" value="latest">
+                <button class="btn" onclick="exploreEthBlock()">Explore Block</button>
+                <div id="eth-block-result" class="result">Ready</div>
+            </div>
+
+            <!-- Transaction -->
+            <div class="card">
+                <h3>📊 Transaction Analysis</h3>
+                <input type="text" id="eth-tx" placeholder="Enter transaction hash">
+                <button class="btn" onclick="analyzeEthTx()">Analyze Transaction</button>
+                <div id="eth-tx-result" class="result">Ready</div>
+            </div>
+
+            <!-- Gas -->
+            <div class="card">
+                <h3>⛽ Gas Price</h3>
+                <button class="btn" onclick="getEthGas()">Get Gas Price</button>
+                <div id="eth-gas-result" class="result">Ready</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        Universal Blockchain Platform (UBP) v2.0.0 &bull; Built with ❤️
+    </div>
+
+    <script>
+        async function fetchAPI(url, data) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            return response.json();
+        }
+
+        function displayResult(elementId, data) {
+            const el = document.getElementById(elementId);
+            if (data.error) {
+                el.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+            } else {
+                el.innerHTML = `<span class="success">✅ Success</span>\n${JSON.stringify(data, null, 2)}`;
+            }
+        }
+
+        async function inspectEthWallet() {
+            const address = document.getElementById('eth-wallet').value;
+            document.getElementById('eth-wallet-result').textContent = '⏳ Loading...';
+            const data = await fetchAPI('/api/ethereum/wallet', { address });
+            displayResult('eth-wallet-result', data);
+        }
+
+        async function inspectEthContract() {
+            const address = document.getElementById('eth-contract').value;
+            document.getElementById('eth-contract-result').textContent = '⏳ Loading...';
+            const data = await fetchAPI('/api/ethereum/contract', { address });
+            displayResult('eth-contract-result', data);
+        }
+
+        async function inspectEthToken() {
+            const address = document.getElementById('eth-token').value;
+            document.getElementById('eth-token-result').textContent = '⏳ Loading...';
+            const data = await fetchAPI('/api/ethereum/token', { address });
+            displayResult('eth-token-result', data);
+        }
+
+        async function exploreEthBlock() {
+            const block = document.getElementById('eth-block').value;
+            document.getElementById('eth-block-result').textContent = '⏳ Loading...';
+            const data = await fetchAPI('/api/ethereum/block', { block });
+            displayResult('eth-block-result', data);
+        }
+
+        async function analyzeEthTx() {
+            const tx_hash = document.getElementById('eth-tx').value;
+            if (!tx_hash) {
+                document.getElementById('eth-tx-result').textContent = '❌ Please enter a transaction hash';
+                return;
+            }
+            document.getElementById('eth-tx-result').textContent = '⏳ Loading...';
+            const data = await fetchAPI('/api/ethereum/transaction', { tx_hash });
+            displayResult('eth-tx-result', data);
+        }
+
+        async function getEthGas() {
+            document.getElementById('eth-gas-result').textContent = '⏳ Loading...';
+            try {
+                const response = await fetch('/api/ethereum/gas');
+                const data = await response.json();
+                displayResult('eth-gas-result', data);
+            } catch (e) {
+                document.getElementById('eth-gas-result').textContent = `❌ Error: ${e.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

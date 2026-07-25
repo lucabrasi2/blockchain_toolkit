@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UBP - Universal Blockchain Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e17;
+            color: #e0e6ed;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1f2e, #0d1220);
+            padding: 20px 40px;
+            border-bottom: 1px solid #2a3a5a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .version {
+            color: #6a7a8e;
+            font-size: 14px;
+        }
+        .nav {
+            display: flex;
+            gap: 20px;
+            background: #141b2b;
+            padding: 12px 40px;
+            border-bottom: 1px solid #1e2a3e;
+        }
+        .nav a {
+            color: #8a9aae;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s;
+            font-size: 15px;
+        }
+        .nav a:hover {
+            background: #1e2a3e;
+            color: #e0e6ed;
+        }
+        .nav a.active {
+            background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 30px;
+        }
+        .hero {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        .hero h2 {
+            font-size: 42px;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 18px;
+            color: #8a9aae;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        .chains-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 40px;
+        }
+        .chain-card {
+            background: #141b2b;
+            border-radius: 12px;
+            padding: 30px 24px;
+            border: 1px solid #1e2a3e;
+            text-align: center;
+            transition: all 0.3s;
+            text-decoration: none;
+            color: #e0e6ed;
+        }
+        .chain-card:hover {
+            border-color: #3a4a6a;
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+        .chain-card .emoji {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 12px;
+        }
+        .chain-card h3 {
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+        .chain-card p {
+            color: #8a9aae;
+            font-size: 14px;
+        }
+        .chain-card .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-top: 12px;
+            background: #00b894;
+            color: #0a0e17;
+        }
+        .chain-card.ethereum .status { background: #6c5ce7; color: white; }
+        .chain-card.bitcoin .status { background: #f7931a; color: white; }
+        .chain-card.tron .status { background: #ef4444; color: white; }
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: #4a5a6e;
+            font-size: 13px;
+            border-top: 1px solid #1a1f2e;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌐 Universal Blockchain Platform</h1>
+        <span class="version">v2.0.0</span>
+    </div>
+    <div class="nav">
+        <a href="/" class="active">Home</a>
+        <a href="/ethereum">🟣 Ethereum</a>
+        <a href="/bitcoin">🟠 Bitcoin</a>
+        <a href="/tron">🔴 TRON</a>
+    </div>
+
+    <div class="container">
+        <div class="hero">
+            <h2>Multi-Chain Blockchain Intelligence</h2>
+            <p>Inspect wallets, analyze contracts, explore blocks, and validate nodes across Ethereum, Bitcoin, and TRON networks.</p>
+        </div>
+
+        <div class="chains-grid">
+            <a href="/ethereum" class="chain-card ethereum">
+                <span class="emoji">🟣</span>
+                <h3>Ethereum</h3>
+                <p>Wallet, Contract, Token, Block, Transaction, Node Validation, Gas Optimization</p>
+                <span class="status">Active</span>
+            </a>
+            <a href="/bitcoin" class="chain-card bitcoin">
+                <span class="emoji">🟠</span>
+                <h3>Bitcoin</h3>
+                <p>Wallet, Block, Transaction, Node Validation, Fee Optimization</p>
+                <span class="status">Active</span>
+            </a>
+            <a href="/tron" class="chain-card tron">
+                <span class="emoji">🔴</span>
+                <h3>TRON</h3>
+                <p>Wallet, Contract, Token, Block, Transaction, Node Validation, Energy Optimization</p>
+                <span class="status">Active</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="footer">
+        Universal Blockchain Platform (UBP) v2.0.0 &bull; Built with ❤️
+    </div>
+</body>
+</html>
