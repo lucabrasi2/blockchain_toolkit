@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup 2FA - UBP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e17;
+            color: #e0e6ed;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: #141b2b;
+            border-radius: 16px;
+            padding: 40px;
+            border: 1px solid #1e2a3e;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+        h1 { font-size: 28px; margin-bottom: 8px; background: linear-gradient(135deg, #6c5ce7, #00b894); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .subtitle { color: #6a7a8e; font-size: 14px; margin-bottom: 24px; }
+        .qr-container { margin: 20px 0; }
+        .qr-container img { border-radius: 8px; background: white; padding: 10px; max-width: 200px; }
+        .secret { font-family: monospace; font-size: 18px; background: #0d1422; padding: 10px; border-radius: 8px; margin: 10px 0; color: #6c5ce7; word-break: break-all; }
+        .form-group { margin-bottom: 16px; }
+        .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            background: #0d1422;
+            border: 1px solid #1e2a3e;
+            border-radius: 8px;
+            color: #e0e6ed;
+            font-size: 18px;
+            text-align: center;
+            letter-spacing: 4px;
+        }
+        .form-group input:focus { outline: none; border-color: #6c5ce7; }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .flash {
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        .flash.success { background: #00b894; color: #0a0e17; }
+        .flash.danger { background: #ef4444; color: white; }
+        .flash.info { background: #6c5ce7; color: white; }
+        .steps { text-align: left; color: #8a9aae; font-size: 14px; margin: 16px 0; }
+        .steps li { margin-bottom: 8px; }
+        .back-link { color: #6c5ce7; text-decoration: none; display: inline-block; margin-top: 16px; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Two-Factor Authentication</h1>
+        <div class="subtitle">Scan the QR code with your authenticator app</div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="qr-container">
+            {% if qr_code %}
+                <img src="data:image/png;base64,{{ qr_code }}" alt="2FA QR Code">
+            {% else %}
+                <p style="color: #6a7a8e;">QR code not available</p>
+            {% endif %}
+        </div>
+
+        <div class="secret">Secret: {{ secret }}</div>
+
+        <div class="steps">
+            <ol>
+                <li>Open your authenticator app (Google Authenticator, Authy, etc.)</li>
+                <li>Scan the QR code above or enter the secret manually</li>
+                <li>Enter the 6-digit code below to verify</li>
+            </ol>
+        </div>
+
+        <form method="POST" action="{{ url_for('auth.verify_2fa') }}">
+            <div class="form-group">
+                <input type="text" name="code" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]*" required>
+            </div>
+            <button type="submit" class="btn">Verify & Enable 2FA</button>
+        </form>
+
+        <a href="{{ url_for('auth.profile') }}" class="back-link">← Back to Profile</a>
+    </div>
+</body>
+</html>
