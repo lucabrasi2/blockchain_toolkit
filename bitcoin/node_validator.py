@@ -10,7 +10,8 @@ Purpose
 -------
 Bitcoin node validation and health checking.
 
-This module provides node health checks for Bitcoin nodes.
+This module provides node health checks for Bitcoin nodes
+using public APIs.
 
 Author
 ------
@@ -28,8 +29,8 @@ Version
 
 from typing import Dict, Any, Optional, List
 import time
+import requests
 
-from bitcoin.connection import get_connection
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -42,6 +43,7 @@ class BitcoinNodeValidator:
 
     def __init__(self, rpc_url: Optional[str] = None):
         self.rpc_url = rpc_url
+        self.blockchain_info_url = "https://blockchain.info"
 
     def validate(self) -> Dict[str, Any]:
         """
@@ -55,6 +57,7 @@ class BitcoinNodeValidator:
         logger.info("Starting node validation for Bitcoin")
 
         result = {
+            "network": "Bitcoin",
             "is_connected": False,
             "is_syncing": False,
             "node_type": "Full Node",
@@ -71,24 +74,30 @@ class BitcoinNodeValidator:
         try:
             start_time = time.time()
 
-            client = get_connection()
-            block = client.get_latest_block()
-
-            if "error" not in block:
+            # Get latest block
+            response = requests.get(f"{self.blockchain_info_url}/latestblock", timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                result["block_number"] = data.get("height", 0)
                 result["is_connected"] = True
-                result["block_number"] = block.get("number", 0)
                 result["response_time_ms"] = round((time.time() - start_time) * 1000, 2)
-
-                # Add block details
-                result["details"]["difficulty"] = block.get("difficulty")
-                result["details"]["transaction_count"] = block.get("transaction_count")
-                result["details"]["size"] = block.get("size")
-
+                
+                # Get additional stats
+                try:
+                    stats_response = requests.get(f"{self.blockchain_info_url}/stats", timeout=10)
+                    if stats_response.status_code == 200:
+                        stats = stats_response.json()
+                        result["details"]["total_transactions"] = stats.get("n_tx", 0)
+                        result["details"]["total_blocks"] = stats.get("n_blocks", 0)
+                except Exception:
+                    pass
+                
                 result["health_status"] = "Healthy 🟢"
                 logger.info("Bitcoin node validation successful")
             else:
-                result["issues"].append("Unable to retrieve block")
-                result["health_status"] = "Unhealthy 🔴"
+                result["issues"].append("Unable to reach blockchain.info API")
+                result["health_status"] = "Degraded 🟡"
 
         except Exception as error:
             logger.error(f"Bitcoin node validation failed: {error}")
@@ -123,7 +132,7 @@ def compare_nodes(node_urls: List[str]) -> Dict[str, Any]:
     Parameters
     ----------
     node_urls : List[str]
-        List of node RPC URLs to compare.
+        List of node URLs to compare.
 
     Returns
     -------

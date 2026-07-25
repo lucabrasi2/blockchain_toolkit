@@ -10,9 +10,6 @@ Purpose
 -------
 Application menu definitions for the CLI.
 
-This module provides all menu definitions for the Universal Blockchain Platform.
-Each blockchain has its own menu with appropriate operations.
-
 Author
 ------
 Jaramogi Diddy
@@ -143,15 +140,17 @@ class BitcoinMenu:
         print("  1. 👛 Inspect Wallet")
         print("  2. 🔍 Explore Block")
         print("  3. 📊 Analyze Transaction")
-        print("  4. 🔙 Back to Main Menu")
+        print("  4. 🖥️  Validate Node")
+        print("  5. ⛽ Fee Optimization")
+        print("  6. 🔙 Back to Main Menu")
         print_divider("-", 40)
 
-        return input("\nEnter your choice (1-4): ").strip()
+        return input("\nEnter your choice (1-6): ").strip()
 
     @staticmethod
     def invalid_choice() -> None:
         """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-4.")
+        print_error("Invalid choice. Please enter 1-6.")
         input("\nPress Enter to continue...")
 
 
@@ -299,7 +298,6 @@ class HelpMenu:
         input("Press Enter to continue...")
 
 
-# Backward compatibility
 def main_menu():
     """Legacy function for backward compatibility."""
     return MainMenu.display()

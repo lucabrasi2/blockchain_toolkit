@@ -30,7 +30,6 @@ Version
 from typing import Dict, Any
 import requests
 
-from bitcoin.connection import get_connection
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -42,8 +41,8 @@ class BitcoinFeeOptimizer:
     """
 
     def __init__(self):
-        self.client = get_connection()
-        self.api_url = "https://blockchain.info"
+        self.mempool_url = "https://mempool.space/api/v1"
+        self.blockchain_info_url = "https://blockchain.info"
 
     def get_fee_estimate(self) -> Dict[str, Any]:
         """
@@ -55,24 +54,20 @@ class BitcoinFeeOptimizer:
             Fee estimates in satoshis per byte.
         """
         try:
-            # Try mempool.space API first
-            url = "https://mempool.space/api/v1/fees/recommended"
-            response = requests.get(url, timeout=10)
-
+            # Try mempool.space first
+            response = requests.get(f"{self.mempool_url}/fees/recommended", timeout=10)
             if response.status_code == 200:
                 data = response.json()
-
                 return {
                     "fast": data.get("fastestFee", 0),
                     "standard": data.get("halfHourFee", 0),
                     "slow": data.get("hourFee", 0),
                     "unit": "sat/byte",
+                    "source": "mempool.space"
                 }
-
+            
             # Fallback to blockchain.info
-            url = f"{self.api_url}/fee-estimates"
-            response = requests.get(url, timeout=10)
-
+            response = requests.get(f"{self.blockchain_info_url}/fee-estimates", timeout=10)
             if response.status_code == 200:
                 data = response.json()
                 return {
@@ -80,6 +75,7 @@ class BitcoinFeeOptimizer:
                     "standard": data.get("60", 0),
                     "slow": data.get("120", 0),
                     "unit": "sat/byte",
+                    "source": "blockchain.info"
                 }
 
             return {"error": "Unable to fetch fee estimates"}

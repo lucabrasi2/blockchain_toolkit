@@ -15,7 +15,6 @@ Version: 2.0.0
 """
 
 import sys
-from typing import Optional
 
 from core.logger import get_logger
 from core.menu import MainMenu, EthereumMenu, BitcoinMenu, TronMenu
@@ -313,6 +312,10 @@ class App:
             elif choice == "3":
                 self._analyze_bitcoin_transaction()
             elif choice == "4":
+                self._validate_bitcoin_node()
+            elif choice == "5":
+                self._bitcoin_fee_optimizer()
+            elif choice == "6":
                 break
             else:
                 BitcoinMenu.invalid_choice()
@@ -360,6 +363,89 @@ class App:
         except Exception as error:
             print_error(str(error))
             logger.error(f"Bitcoin transaction analysis failed: {error}")
+        input("\nPress Enter to continue...")
+
+    def _validate_bitcoin_node(self) -> None:
+        """Validate a Bitcoin node."""
+        try:
+            print("\n🖥️  Bitcoin Node Validation")
+            print("-" * 40)
+            print("  1. Validate Bitcoin Network")
+            print("-" * 40)
+            
+            choice = input("\nEnter your choice (1): ").strip()
+            
+            if choice == "1":
+                print("\n⏳ Validating Bitcoin network...")
+                from bitcoin.node_validator import validate_node
+                report = validate_node()
+                NodeDisplay.display_node_report(report)
+            else:
+                print_error("Invalid choice")
+                return
+            
+        except Exception as error:
+            print_error(str(error))
+            logger.error(f"Bitcoin node validation failed: {error}")
+        input("\nPress Enter to continue...")
+
+    def _bitcoin_fee_optimizer(self) -> None:
+        """Optimize Bitcoin fees."""
+        try:
+            print("\n⛽ Bitcoin Fee Optimization")
+            print("-" * 40)
+            print("  1. Current Fee Estimates")
+            print("  2. Fee Cost Estimate")
+            print("  3. Optimal Fee Recommendations")
+            print("-" * 40)
+            
+            choice = input("\nEnter your choice (1-3): ").strip()
+            
+            from bitcoin.gas import get_fee_optimizer
+            optimizer = get_fee_optimizer()
+            
+            if choice == "1":
+                fee_info = optimizer.get_fee_estimate()
+                print("\n📊 Current Fee Estimates:")
+                print("-" * 40)
+                if "error" in fee_info:
+                    print_error(fee_info["error"])
+                else:
+                    print(f"  Fast:      {fee_info.get('fast', 0)} sat/byte")
+                    print(f"  Standard:  {fee_info.get('standard', 0)} sat/byte")
+                    print(f"  Slow:      {fee_info.get('slow', 0)} sat/byte")
+                    print(f"  Source:    {fee_info.get('source', 'unknown')}")
+                print()
+            elif choice == "2":
+                tx_size = input("Enter transaction size in bytes (default 250): ").strip()
+                tx_size = int(tx_size) if tx_size else 250
+                fee_rate = input("Enter fee rate in sat/byte (default 10): ").strip()
+                fee_rate = int(fee_rate) if fee_rate else 10
+                estimate = optimizer.estimate_fee(tx_size, fee_rate)
+                print("\n📊 Fee Estimate:")
+                print("-" * 40)
+                print(f"  Transaction Size: {estimate.get('tx_size_bytes', 0)} bytes")
+                print(f"  Fee Rate:         {estimate.get('fee_rate_sat_byte', 0)} sat/byte")
+                print(f"  Fee (Satoshis):   {estimate.get('fee_satoshis', 0):,}")
+                print(f"  Fee (BTC):        {estimate.get('fee_btc', 0)} BTC")
+                print()
+            elif choice == "3":
+                print("\n📊 Optimal Fee Recommendations:")
+                print("-" * 40)
+                for urgency in ["slow", "standard", "fast"]:
+                    rec = optimizer.get_optimal_fee(urgency)
+                    if "error" in rec:
+                        print_error(rec["error"])
+                    else:
+                        print(f"  {urgency.title()}: {rec.get('recommended_fee_rate_sat_byte', 0)} sat/byte → {rec.get('estimated_time', 'unknown')}")
+                print()
+            else:
+                print_error("Invalid choice")
+                return
+            
+        except Exception as error:
+            print_error(str(error))
+            logger.error(f"Bitcoin fee optimization failed: {error}")
         input("\nPress Enter to continue...")
 
     ###########################################################################
