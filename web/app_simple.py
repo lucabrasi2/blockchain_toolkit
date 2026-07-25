@@ -4,11 +4,11 @@ Universal Blockchain Platform (UBP)
 
 Module
 ------
-web.app
+web.app_simple
 
 Purpose
 -------
-Flask web interface for UBP.
+Flask web interface for UBP (without WebSocket).
 
 Author
 ------
@@ -32,9 +32,6 @@ from flask import Flask, render_template, request, jsonify, session, flash, redi
 from flask_cors import CORS
 from flask_login import LoginManager, login_required, current_user
 from flask_bcrypt import Bcrypt
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_mail import Mail
 from datetime import datetime
 from functools import wraps
 
@@ -45,9 +42,6 @@ from core.logger import get_logger
 
 # Import authentication
 from web.auth import auth_bp, load_user, get_user_manager, require_api_key, authenticate_api_key
-
-# Import SocketIO
-from web.socketio import socketio, init_socketio
 
 logger = get_logger(__name__)
 
@@ -64,25 +58,11 @@ login_manager.user_loader(load_user)
 # Setup bcrypt
 bcrypt = Bcrypt(app)
 
-# Setup rate limiting
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["100 per minute", "1000 per hour"],
-    storage_uri="memory://"
-)
-
-# Setup mail
-mail = Mail(app)
-
 # Register auth blueprint
 app.register_blueprint(auth_bp)
 
 # Make current_user available in templates
 app.jinja_env.globals['current_user'] = current_user
-
-# Initialize SocketIO
-init_socketio(app)
 
 # Enable CORS
 CORS(app)
@@ -166,7 +146,6 @@ def history_page():
 # ============ Ethereum API Endpoints ============
 
 @app.route('/api/ethereum/wallet', methods=['POST'])
-@limiter.limit("10 per minute")
 def ethereum_wallet():
     """Inspect Ethereum wallet."""
     try:
@@ -191,7 +170,6 @@ def ethereum_wallet():
 
 
 @app.route('/api/ethereum/contract', methods=['POST'])
-@limiter.limit("10 per minute")
 def ethereum_contract():
     """Inspect Ethereum contract."""
     try:
@@ -206,7 +184,6 @@ def ethereum_contract():
 
 
 @app.route('/api/ethereum/token', methods=['POST'])
-@limiter.limit("10 per minute")
 def ethereum_token():
     """Inspect Ethereum token."""
     try:
@@ -221,7 +198,6 @@ def ethereum_token():
 
 
 @app.route('/api/ethereum/block', methods=['POST'])
-@limiter.limit("10 per minute")
 def ethereum_block():
     """Explore Ethereum block."""
     try:
@@ -234,7 +210,6 @@ def ethereum_block():
 
 
 @app.route('/api/ethereum/transaction', methods=['POST'])
-@limiter.limit("10 per minute")
 def ethereum_transaction():
     """Analyze Ethereum transaction."""
     try:
@@ -249,7 +224,6 @@ def ethereum_transaction():
 
 
 @app.route('/api/ethereum/gas', methods=['GET'])
-@limiter.limit("20 per minute")
 def ethereum_gas():
     """Get Ethereum gas price."""
     try:
@@ -263,7 +237,6 @@ def ethereum_gas():
 # ============ Bitcoin API Endpoints ============
 
 @app.route('/api/bitcoin/wallet', methods=['POST'])
-@limiter.limit("10 per minute")
 def bitcoin_wallet():
     """Inspect Bitcoin wallet."""
     try:
@@ -278,7 +251,6 @@ def bitcoin_wallet():
 
 
 @app.route('/api/bitcoin/block', methods=['POST'])
-@limiter.limit("10 per minute")
 def bitcoin_block():
     """Explore Bitcoin block."""
     try:
@@ -291,7 +263,6 @@ def bitcoin_block():
 
 
 @app.route('/api/bitcoin/transaction', methods=['POST'])
-@limiter.limit("10 per minute")
 def bitcoin_transaction():
     """Analyze Bitcoin transaction."""
     try:
@@ -306,7 +277,6 @@ def bitcoin_transaction():
 
 
 @app.route('/api/bitcoin/fee', methods=['GET'])
-@limiter.limit("20 per minute")
 def bitcoin_fee():
     """Get Bitcoin fee estimates."""
     try:
@@ -320,7 +290,6 @@ def bitcoin_fee():
 # ============ TRON API Endpoints ============
 
 @app.route('/api/tron/wallet', methods=['POST'])
-@limiter.limit("10 per minute")
 def tron_wallet():
     """Inspect TRON wallet."""
     try:
@@ -335,7 +304,6 @@ def tron_wallet():
 
 
 @app.route('/api/tron/contract', methods=['POST'])
-@limiter.limit("10 per minute")
 def tron_contract():
     """Inspect TRON contract."""
     try:
@@ -350,7 +318,6 @@ def tron_contract():
 
 
 @app.route('/api/tron/token', methods=['POST'])
-@limiter.limit("10 per minute")
 def tron_token():
     """Inspect TRON token."""
     try:
@@ -365,7 +332,6 @@ def tron_token():
 
 
 @app.route('/api/tron/block', methods=['POST'])
-@limiter.limit("10 per minute")
 def tron_block():
     """Explore TRON block."""
     try:
@@ -387,7 +353,6 @@ def tron_block():
 
 
 @app.route('/api/tron/transaction', methods=['POST'])
-@limiter.limit("10 per minute")
 def tron_transaction():
     """Analyze TRON transaction."""
     try:
@@ -415,7 +380,6 @@ def dashboard_stats():
         with db.get_session() as session:
             from database.models import WalletInspection, ContractInspection, TransactionHistory, CacheEntry
             
-            # Count by blockchain
             eth_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'ethereum').count()
             btc_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'bitcoin').count()
             tron_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'tron').count()
@@ -452,7 +416,6 @@ def dashboard_recent():
             
             results = []
             
-            # Get recent wallet inspections
             wallets = session.query(WalletInspection).order_by(WalletInspection.created_at.desc()).limit(10).all()
             for w in wallets:
                 results.append({
@@ -462,7 +425,6 @@ def dashboard_recent():
                     "created_at": w.created_at.strftime("%Y-%m-%d %H:%M") if w.created_at else None,
                 })
             
-            # Get recent contract inspections
             contracts = session.query(ContractInspection).order_by(ContractInspection.created_at.desc()).limit(10).all()
             for c in contracts:
                 results.append({
@@ -472,7 +434,6 @@ def dashboard_recent():
                     "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None,
                 })
             
-            # Get recent transactions
             txs = session.query(TransactionHistory).order_by(TransactionHistory.created_at.desc()).limit(10).all()
             for t in txs:
                 results.append({
@@ -483,7 +444,6 @@ def dashboard_recent():
                     "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else None,
                 })
             
-            # Sort by created_at (most recent first)
             results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             
             return jsonify(results[:20])
@@ -513,7 +473,6 @@ def history():
             
             items = []
             
-            # Wallet inspections
             query = session.query(WalletInspection)
             if blockchain:
                 query = query.filter(WalletInspection.blockchain == blockchain)
@@ -530,7 +489,6 @@ def history():
                     "created_at": w.created_at.strftime("%Y-%m-%d %H:%M") if w.created_at else None,
                 })
             
-            # Contract inspections
             if not type_filter or type_filter == 'contract':
                 query = session.query(ContractInspection)
                 if blockchain:
@@ -548,7 +506,6 @@ def history():
                         "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None,
                     })
             
-            # Transaction history
             if not type_filter or type_filter == 'transaction':
                 query = session.query(TransactionHistory)
                 if blockchain:
@@ -566,7 +523,6 @@ def history():
                         "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else None,
                     })
             
-            # Sort and paginate
             items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             total = len(items)
             
@@ -641,41 +597,6 @@ def export_data(export_type):
         return jsonify({"error": str(e)}), 400
 
 
-# ============ WebSocket Events ============
-
-@socketio.on('connect')
-def handle_connect():
-    """Handle WebSocket connection."""
-    logger.info(f"WebSocket client connected")
-    if current_user.is_authenticated:
-        socketio.emit('message', {'data': f'Welcome {current_user.username}!'}, room=request.sid)
-
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Handle WebSocket disconnection."""
-    logger.info(f"WebSocket client disconnected")
-
-
-@socketio.on('subscribe_wallet')
-def handle_subscribe_wallet(data):
-    """Subscribe to wallet updates."""
-    address = data.get('address')
-    if address:
-        room = f'wallet_{address}'
-        join_room(room)
-        emit('message', {'data': f'Subscribed to wallet: {address}'}, room=room)
-
-
-@socketio.on('subscribe_block')
-def handle_subscribe_block(data):
-    """Subscribe to block updates."""
-    blockchain = data.get('blockchain', 'ethereum')
-    room = f'block_{blockchain}'
-    join_room(room)
-    emit('message', {'data': f'Subscribed to block updates: {blockchain}'}, room=room)
-
-
 # ============ Main Entry Point ============
 
 if __name__ == '__main__':
@@ -689,7 +610,7 @@ if __name__ == '__main__':
     logger.info(f"📍 Register: http://localhost:5000/auth/register")
     logger.info("=" * 60)
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
 
 ###############################################################################

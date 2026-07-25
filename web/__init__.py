@@ -24,7 +24,8 @@ Version
 ===============================================================================
 """
 
-from web.app import app
+# Import the simple app to avoid circular imports
+from web.app_simple import app
 
 __all__ = ["app"]
 
