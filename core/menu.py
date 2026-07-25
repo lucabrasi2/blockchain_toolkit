@@ -1,22 +1,30 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Module:
-    Application Menus
+Module
+------
+core.menu
 
-Purpose:
-    Display and handle all application menus.
+Purpose
+-------
+Application menu definitions for the CLI.
 
-Responsibilities:
-    • Display main menu
-    • Display blockchain-specific menus
-    • Get user selections
-    • Validate menu input
-    • Show help information
+This module provides all menu definitions for the Universal Blockchain Platform.
+Each blockchain has its own menu with appropriate operations.
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Author
+------
+Jaramogi Diddy
+
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
 
 from core.display.utils import (
@@ -71,8 +79,20 @@ class MainMenu:
 
 
 class EthereumMenu:
+    """
+    Ethereum blockchain menu.
+    """
+
     @staticmethod
     def display() -> str:
+        """
+        Display the Ethereum menu and get user choice.
+
+        Returns
+        -------
+        str
+            User's menu selection.
+        """
         clear_screen()
         print_header("🟣 ETHEREUM MODULE", "=", 60)
         print()
@@ -91,11 +111,11 @@ class EthereumMenu:
         print_divider("-", 40)
 
         return input("\nEnter your choice (1-9): ").strip()
-    
+
     @staticmethod
     def invalid_choice() -> None:
         """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-8.")
+        print_error("Invalid choice. Please enter 1-9.")
         input("\nPress Enter to continue...")
 
 
@@ -159,15 +179,19 @@ class TronMenu:
         print("  1. 👛 Inspect Wallet")
         print("  2. 📄 Inspect Contract")
         print("  3. 💱 Inspect Token")
-        print("  4. 🔙 Back to Main Menu")
+        print("  4. 🔍 Explore Block")
+        print("  5. 📊 Analyze Transaction")
+        print("  6. 🖥️  Validate Node")
+        print("  7. 🔄 Compare Nodes")
+        print("  8. 🔙 Back to Main Menu")
         print_divider("-", 40)
 
-        return input("\nEnter your choice (1-4): ").strip()
+        return input("\nEnter your choice (1-8): ").strip()
 
     @staticmethod
     def invalid_choice() -> None:
         """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-4.")
+        print_error("Invalid choice. Please enter 1-8.")
         input("\nPress Enter to continue...")
 
 
@@ -235,13 +259,14 @@ class HelpMenu:
         print("  • Wallet Inspection (Ethereum, Bitcoin, TRON)")
         print("  • Contract Analysis (Ethereum, TRON)")
         print("  • Token Information (ERC-20, TRC-20)")
-        print("  • Block Exploration (Ethereum, Bitcoin)")
-        print("  • Transaction Analysis (Ethereum, Bitcoin)")
+        print("  • Block Exploration (Ethereum, Bitcoin, TRON)")
+        print("  • Transaction Analysis (Ethereum, Bitcoin, TRON)")
         print("  • Node Validation & Comparison")
+        print("  • Gas/Energy/Fee Optimization")
         print()
 
         print("⛓️  SUPPORTED BLOCKCHAINS")
-        print("  • 🟣 Ethereum (Mainnet, Goerli, Sepolia)")
+        print("  • 🟣 Ethereum (Mainnet, Sepolia, Holesky)")
         print("  • 🟠 Bitcoin (Mainnet)")
         print("  • 🔴 TRON (Mainnet)")
         print()
@@ -251,6 +276,7 @@ class HelpMenu:
         print("  • Infura")
         print("  • QuickNode")
         print("  • Ankr")
+        print("  • Public Endpoints")
         print("  • Self-hosted Nodes")
         print()
 
@@ -277,3 +303,8 @@ class HelpMenu:
 def main_menu():
     """Legacy function for backward compatibility."""
     return MainMenu.display()
+
+
+###############################################################################
+# End of File
+###############################################################################

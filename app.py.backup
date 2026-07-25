@@ -86,10 +86,6 @@ class App:
             print(f"\n❌ An unexpected error occurred: {error}")
             sys.exit(1)
 
-    ###########################################################################
-    # Ethereum Handlers
-    ###########################################################################
-
     def _handle_ethereum_menu(self) -> None:
         """Handle Ethereum menu."""
         while True:
@@ -110,8 +106,6 @@ class App:
             elif choice == "7":
                 self._compare_nodes()
             elif choice == "8":
-                self._gas_optimizer()
-            elif choice == "9":
                 break
             else:
                 EthereumMenu.invalid_choice()
@@ -192,9 +186,9 @@ class App:
         input("\nPress Enter to continue...")
 
     def _validate_node(self) -> None:
-        """Validate an Ethereum node."""
+        """Validate a blockchain node."""
         try:
-            print("\n🖥️  Ethereum Node Validation")
+            print("\n🖥️  Node Validation")
             print("-" * 40)
             print("  1. Validate Current Node")
             print("  2. Validate Custom Node")
@@ -223,17 +217,13 @@ class App:
         input("\nPress Enter to continue...")
 
     def _compare_nodes(self) -> None:
-        """Compare Ethereum nodes."""
+        """Compare multiple nodes."""
         try:
-            print("\n🔄 Ethereum Node Comparison")
+            print("\n🔄 Node Comparison")
             print("-" * 40)
             
             node_urls = []
             print("Enter up to 5 node URLs (press Enter with empty line to stop):")
-            print("Examples:")
-            print("  https://ethereum.publicnode.com")
-            print("  https://rpc.ankr.com/eth")
-            print()
             
             for i in range(5):
                 url = input(f"  Node {i+1}: ").strip()
@@ -256,50 +246,6 @@ class App:
             print_error(str(error))
             logger.error(f"Node comparison failed: {error}")
         input("\nPress Enter to continue...")
-
-    def _gas_optimizer(self) -> None:
-        """Optimize gas prices."""
-        try:
-            print("\n⛽ Gas Price Optimization")
-            print("-" * 40)
-            print("  1. Current Gas Price")
-            print("  2. Gas Cost Estimate")
-            print("  3. Optimal Gas Recommendations")
-            print("-" * 40)
-            
-            choice = input("\nEnter your choice (1-3): ").strip()
-            
-            from ethereum.gas import get_gas_optimizer
-            optimizer = get_gas_optimizer()
-            from core.display.gas_display import GasDisplay
-            
-            if choice == "1":
-                gas_info = optimizer.get_gas_price()
-                GasDisplay.display_gas_info(gas_info)
-            elif choice == "2":
-                gas_limit = input("Enter gas limit (default 21000): ").strip()
-                gas_limit = int(gas_limit) if gas_limit else 21000
-                estimate = optimizer.estimate_gas_cost(gas_limit)
-                GasDisplay.display_gas_estimate(estimate)
-            elif choice == "3":
-                print("\n📊 Optimal Gas Recommendations")
-                print("-" * 40)
-                for urgency in ["slow", "standard", "fast", "instant"]:
-                    rec = optimizer.get_optimal_gas_price(urgency)
-                    print(f"  {urgency.title()}: {rec['recommended_gwei']} Gwei → {rec['estimated_time']}")
-                print()
-            else:
-                print_error("Invalid choice")
-                return
-            
-        except Exception as error:
-            print_error(str(error))
-            logger.error(f"Gas optimization failed: {error}")
-        input("\nPress Enter to continue...")
-
-    ###########################################################################
-    # Bitcoin Handlers
-    ###########################################################################
 
     def _handle_bitcoin_menu(self) -> None:
         """Handle Bitcoin menu."""
@@ -362,10 +308,6 @@ class App:
             logger.error(f"Bitcoin transaction analysis failed: {error}")
         input("\nPress Enter to continue...")
 
-    ###########################################################################
-    # TRON Handlers
-    ###########################################################################
-
     def _handle_tron_menu(self) -> None:
         """Handle TRON menu."""
         while True:
@@ -378,14 +320,6 @@ class App:
             elif choice == "3":
                 self._inspect_tron_token()
             elif choice == "4":
-                self._explore_tron_block()
-            elif choice == "5":
-                self._analyze_tron_transaction()
-            elif choice == "6":
-                self._validate_tron_node()
-            elif choice == "7":
-                self._compare_tron_nodes()
-            elif choice == "8":
                 break
             else:
                 TronMenu.invalid_choice()
@@ -435,127 +369,6 @@ class App:
             logger.error(f"TRON token inspection failed: {error}")
         input("\nPress Enter to continue...")
 
-    def _explore_tron_block(self) -> None:
-        """Explore a TRON block."""
-        try:
-            from core.input import get_block_input
-            
-            block_number = get_block_input("Enter TRON block number or 'latest'")
-            if block_number is None:
-                return
-            
-            print("\n⏳ Fetching TRON block...")
-            from tron.blocks import get_block, get_latest_block_number
-            
-            if block_number == "latest":
-                block_num = get_latest_block_number()
-                report = get_block(block_num)
-            else:
-                report = get_block(block_number)
-            
-            BlockDisplay.display_block_report(report)
-            
-        except Exception as error:
-            print_error(str(error))
-            logger.error(f"TRON block exploration failed: {error}")
-        input("\nPress Enter to continue...")
-
-    def _analyze_tron_transaction(self) -> None:
-        """Analyze a TRON transaction."""
-        try:
-            from core.input import get_text_input
-            
-            tx_hash = get_text_input("Enter TRON transaction hash")
-            if not tx_hash:
-                return
-            
-            print("\n⏳ Analyzing TRON transaction...")
-            from tron.transactions import get_transaction
-            report = get_transaction(tx_hash)
-            
-            TransactionDisplay.display_transaction_report(report)
-            
-        except Exception as error:
-            print_error(str(error))
-            logger.error(f"TRON transaction analysis failed: {error}")
-        input("\nPress Enter to continue...")
-
-    def _validate_tron_node(self) -> None:
-        """Validate a TRON node."""
-        try:
-            print("\n🖥️  TRON Node Validation")
-            print("-" * 40)
-            print("  1. Validate Current TRON Node")
-            print("  2. Validate Custom TRON Node")
-            print("-" * 40)
-            
-            choice = input("\nEnter your choice (1-2): ").strip()
-            
-            if choice == "1":
-                print("\n⏳ Validating current TRON node...")
-                from tron.node_validator import validate_node
-                report = validate_node()
-                NodeDisplay.display_node_report(report)
-            elif choice == "2":
-                from core.input import get_text_input
-                rpc_url = get_text_input("Enter TRON RPC URL")
-                if not rpc_url:
-                    return
-                print(f"\n⏳ Validating TRON node: {rpc_url}")
-                from tron.node_validator import validate_node
-                report = validate_node(rpc_url)
-                NodeDisplay.display_node_report(report)
-            else:
-                print_error("Invalid choice")
-                return
-            
-        except Exception as error:
-            print_error(str(error))
-            logger.error(f"TRON node validation failed: {error}")
-        input("\nPress Enter to continue...")
-
-    def _compare_tron_nodes(self) -> None:
-        """Compare multiple TRON nodes."""
-        try:
-            print("\n🔄 TRON Node Comparison")
-            print("-" * 40)
-            
-            node_urls = []
-            print("Enter up to 5 TRON node URLs (press Enter with empty line to stop):")
-            print("Examples:")
-            print("  https://api.trongrid.io")
-            print("  https://api.shasta.trongrid.io")
-            print()
-            
-            for i in range(5):
-                url = input(f"  Node {i+1}: ").strip()
-                if not url:
-                    break
-                node_urls.append(url)
-            
-            if not node_urls:
-                print_error("No nodes to compare")
-                return
-            
-            if len(node_urls) < 2:
-                print_warning("Need at least 2 nodes to compare")
-                return
-            
-            print(f"\n⏳ Comparing {len(node_urls)} TRON nodes...")
-            from tron.node_validator import compare_nodes
-            comparison = compare_nodes(node_urls)
-            
-            NodeDisplay.display_node_comparison(comparison)
-            
-        except Exception as error:
-            print_error(str(error))
-            logger.error(f"TRON node comparison failed: {error}")
-        input("\nPress Enter to continue...")
-
-    ###########################################################################
-    # Utility Methods
-    ###########################################################################
-
     def _show_settings(self) -> None:
         """Show settings."""
         print("\n⚙️  Settings")
@@ -577,10 +390,9 @@ class App:
         print("  • Wallet Inspection (Ethereum, Bitcoin, TRON)")
         print("  • Contract Analysis (Ethereum, TRON)")
         print("  • Token Information (ERC-20, TRC-20)")
-        print("  • Block Exploration (Ethereum, Bitcoin, TRON)")
-        print("  • Transaction Analysis (Ethereum, Bitcoin, TRON)")
+        print("  • Block Exploration (Ethereum, Bitcoin)")
+        print("  • Transaction Analysis (Ethereum, Bitcoin)")
         print("  • Node Validation & Comparison")
-        print("  • Gas/Energy/Fee Optimization")
         print()
         print("  Supported Blockchains:")
         print("  • 🟣 Ethereum")
@@ -605,8 +417,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-###############################################################################
-# End of File
-###############################################################################
