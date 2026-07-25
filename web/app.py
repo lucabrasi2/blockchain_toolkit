@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
+from datetime import datetime
 
 from controllers.ethereum_controller import EthereumController
 from controllers.bitcoin_controller import BitcoinController
@@ -46,6 +47,24 @@ eth_controller = EthereumController()
 btc_controller = BitcoinController()
 tron_controller = TronController()
 
+
+# ============ Helper Functions ============
+
+def convert_to_serializable(obj):
+    """
+    Convert bytes and HexBytes objects to strings for JSON serialization.
+    """
+    if isinstance(obj, bytes):
+        return obj.hex()
+    elif isinstance(obj, dict):
+        return {k: convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_serializable(item) for item in obj]
+    else:
+        return obj
+
+
+# ============ Page Routes ============
 
 @app.route('/')
 def index():
@@ -71,20 +90,16 @@ def tron_page():
     return render_template('tron.html')
 
 
-# ============ Helper Functions ============
+@app.route('/dashboard')
+def dashboard_page():
+    """Dashboard page."""
+    return render_template('dashboard.html')
 
-def convert_to_serializable(obj):
-    """
-    Convert bytes and HexBytes objects to strings for JSON serialization.
-    """
-    if isinstance(obj, bytes):
-        return obj.hex()
-    elif isinstance(obj, dict):
-        return {k: convert_to_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_to_serializable(item) for item in obj]
-    else:
-        return obj
+
+@app.route('/history')
+def history_page():
+    """History page."""
+    return render_template('history.html')
 
 
 # ============ Ethereum API Endpoints ============
@@ -301,8 +316,247 @@ def tron_transaction():
         return jsonify({"error": str(e)}), 400
 
 
+# ============ Dashboard & History API Endpoints ============
+
+@app.route('/api/dashboard/stats', methods=['GET'])
+def dashboard_stats():
+    """Get dashboard statistics."""
+    try:
+        from database import get_db_manager
+        db = get_db_manager()
+        
+        with db.get_session() as session:
+            from database.models import WalletInspection, ContractInspection, TransactionHistory, CacheEntry
+            
+            # Count by blockchain
+            eth_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'ethereum').count()
+            btc_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'bitcoin').count()
+            tron_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'tron').count()
+            
+            eth_contracts = session.query(ContractInspection).filter(ContractInspection.blockchain == 'ethereum').count()
+            tron_contracts = session.query(ContractInspection).filter(ContractInspection.blockchain == 'tron').count()
+            
+            total_transactions = session.query(TransactionHistory).count()
+            cache_entries = session.query(CacheEntry).count()
+            
+            return jsonify({
+                "total_inspections": eth_wallets + btc_wallets + tron_wallets + eth_contracts + tron_contracts,
+                "ethereum": eth_wallets + eth_contracts,
+                "bitcoin": btc_wallets,
+                "tron": tron_wallets + tron_contracts,
+                "total_transactions": total_transactions,
+                "cache_entries": cache_entries,
+            })
+    except Exception as e:
+        logger.error(f"Dashboard stats error: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route('/api/dashboard/recent', methods=['GET'])
+def dashboard_recent():
+    """Get recent activity."""
+    try:
+        from database import get_db_manager
+        db = get_db_manager()
+        
+        with db.get_session() as session:
+            from database.models import WalletInspection, ContractInspection, TransactionHistory
+            
+            results = []
+            
+            # Get recent wallet inspections
+            wallets = session.query(WalletInspection).order_by(WalletInspection.created_at.desc()).limit(10).all()
+            for w in wallets:
+                results.append({
+                    "type": "wallet",
+                    "blockchain": w.blockchain,
+                    "address": w.address,
+                    "created_at": w.created_at.strftime("%Y-%m-%d %H:%M") if w.created_at else None,
+                })
+            
+            # Get recent contract inspections
+            contracts = session.query(ContractInspection).order_by(ContractInspection.created_at.desc()).limit(10).all()
+            for c in contracts:
+                results.append({
+                    "type": "contract",
+                    "blockchain": c.blockchain,
+                    "address": c.address,
+                    "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None,
+                })
+            
+            # Get recent transactions
+            txs = session.query(TransactionHistory).order_by(TransactionHistory.created_at.desc()).limit(10).all()
+            for t in txs:
+                results.append({
+                    "type": "transaction",
+                    "blockchain": t.blockchain,
+                    "tx_hash": t.tx_hash,
+                    "status": t.status,
+                    "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else None,
+                })
+            
+            # Sort by created_at (most recent first)
+            results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            
+            return jsonify(results[:20])
+    except Exception as e:
+        logger.error(f"Dashboard recent error: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route('/api/history', methods=['GET'])
+def history():
+    """Get history with filters."""
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        blockchain = request.args.get('blockchain', '')
+        type_filter = request.args.get('type', '')
+        search = request.args.get('search', '')
+        
+        from database import get_db_manager
+        db = get_db_manager()
+        
+        offset = (page - 1) * limit
+        
+        with db.get_session() as session:
+            from database.models import WalletInspection, ContractInspection, TransactionHistory
+            
+            items = []
+            
+            # Wallet inspections
+            query = session.query(WalletInspection)
+            if blockchain:
+                query = query.filter(WalletInspection.blockchain == blockchain)
+            if search:
+                query = query.filter(WalletInspection.address.contains(search))
+            wallets = query.order_by(WalletInspection.created_at.desc()).limit(limit).offset(offset).all()
+            for w in wallets:
+                items.append({
+                    "type": "wallet",
+                    "blockchain": w.blockchain,
+                    "address": w.address,
+                    "details": f"Balance: {w.balance_eth or w.balance_btc or w.balance_trx or '0'}",
+                    "status": True,
+                    "created_at": w.created_at.strftime("%Y-%m-%d %H:%M") if w.created_at else None,
+                })
+            
+            # Contract inspections
+            if not type_filter or type_filter == 'contract':
+                query = session.query(ContractInspection)
+                if blockchain:
+                    query = query.filter(ContractInspection.blockchain == blockchain)
+                if search:
+                    query = query.filter(ContractInspection.address.contains(search))
+                contracts = query.order_by(ContractInspection.created_at.desc()).limit(limit).offset(offset).all()
+                for c in contracts:
+                    items.append({
+                        "type": "contract",
+                        "blockchain": c.blockchain,
+                        "address": c.address,
+                        "details": f"{c.name or 'Unknown'} ({c.symbol or 'N/A'})",
+                        "status": True,
+                        "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None,
+                    })
+            
+            # Transaction history
+            if not type_filter or type_filter == 'transaction':
+                query = session.query(TransactionHistory)
+                if blockchain:
+                    query = query.filter(TransactionHistory.blockchain == blockchain)
+                if search:
+                    query = query.filter(TransactionHistory.tx_hash.contains(search))
+                txs = query.order_by(TransactionHistory.created_at.desc()).limit(limit).offset(offset).all()
+                for t in txs:
+                    items.append({
+                        "type": "transaction",
+                        "blockchain": t.blockchain,
+                        "tx_hash": t.tx_hash,
+                        "details": f"From: {t.from_address[:10] if t.from_address else 'N/A'}...",
+                        "status": t.status,
+                        "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else None,
+                    })
+            
+            # Sort and paginate
+            items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            total = len(items)
+            
+            return jsonify({
+                "items": items[:limit],
+                "total": total,
+                "page": page,
+                "total_pages": (total + limit - 1) // limit if total > 0 else 1,
+            })
+    except Exception as e:
+        logger.error(f"History error: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+# ============ Export Endpoints ============
+
+@app.route('/api/export/<export_type>', methods=['GET'])
+def export_data(export_type):
+    """Export data to CSV."""
+    try:
+        from database import get_db_manager
+        db = get_db_manager()
+        
+        with db.get_session() as session:
+            from database.models import WalletInspection, ContractInspection, TransactionHistory
+            
+            results = []
+            
+            if export_type in ['wallet', 'all']:
+                wallets = session.query(WalletInspection).order_by(WalletInspection.created_at.desc()).all()
+                for w in wallets:
+                    results.append({
+                        "type": "wallet",
+                        "blockchain": w.blockchain,
+                        "address": w.address,
+                        "balance": float(w.balance_eth) if w.balance_eth else float(w.balance_btc) if w.balance_btc else float(w.balance_trx) if w.balance_trx else 0,
+                        "classification": w.classification,
+                        "created_at": w.created_at.strftime("%Y-%m-%d %H:%M") if w.created_at else None,
+                    })
+            
+            if export_type in ['contract', 'all']:
+                contracts = session.query(ContractInspection).order_by(ContractInspection.created_at.desc()).all()
+                for c in contracts:
+                    results.append({
+                        "type": "contract",
+                        "blockchain": c.blockchain,
+                        "address": c.address,
+                        "name": c.name,
+                        "symbol": c.symbol,
+                        "standard": c.standard,
+                        "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None,
+                    })
+            
+            if export_type in ['transaction', 'all']:
+                txs = session.query(TransactionHistory).order_by(TransactionHistory.created_at.desc()).all()
+                for t in txs:
+                    results.append({
+                        "type": "transaction",
+                        "blockchain": t.blockchain,
+                        "tx_hash": t.tx_hash,
+                        "from": t.from_address,
+                        "to": t.to_address,
+                        "value": float(t.value_eth) if t.value_eth else float(t.value_btc) if t.value_btc else float(t.value_trx) if t.value_trx else 0,
+                        "status": "Success" if t.status else "Failed" if t.status is False else "Pending",
+                        "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else None,
+                    })
+            
+            return jsonify(results)
+    except Exception as e:
+        logger.error(f"Export error: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+# ============ Main Entry Point ============
+
 if __name__ == '__main__':
     logger.info("Starting Web Interface on http://0.0.0.0:5000")
+    logger.info("Dashboard: http://localhost:5000/dashboard")
+    logger.info("History: http://localhost:5000/history")
     app.run(host='0.0.0.0', port=5000, debug=True)
 
 

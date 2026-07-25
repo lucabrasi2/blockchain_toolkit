@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - UBP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e17;
+            color: #e0e6ed;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1f2e, #0d1220);
+            padding: 20px 40px;
+            border-bottom: 1px solid #2a3a5a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .version { color: #6a7a8e; font-size: 14px; }
+        .nav {
+            display: flex;
+            gap: 20px;
+            background: #141b2b;
+            padding: 12px 40px;
+            border-bottom: 1px solid #1e2a3e;
+        }
+        .nav a {
+            color: #8a9aae;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s;
+            font-size: 15px;
+        }
+        .nav a:hover { background: #1e2a3e; color: #e0e6ed; }
+        .nav a.active { background: #6c5ce7; color: white; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 28px;
+            margin-bottom: 24px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: #141b2b;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #1e2a3e;
+            text-align: center;
+        }
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-card .label {
+            color: #8a9aae;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        .stat-card.bitcoin .number {
+            background: linear-gradient(135deg, #f7931a, #e6841a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-card.tron .number {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: #141b2b;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #1e2a3e;
+        }
+        .card h3 {
+            font-size: 16px;
+            color: #8a9aae;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            text-align: left;
+            padding: 10px 12px;
+            color: #8a9aae;
+            border-bottom: 1px solid #1e2a3e;
+            font-weight: 600;
+        }
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #1a1f2e;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        td .tag {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .tag.ethereum { background: #6c5ce7; color: white; }
+        .tag.bitcoin { background: #f7931a; color: white; }
+        .tag.tron { background: #ef4444; color: white; }
+        .tag.success { background: #00b894; color: #0a0e17; }
+        .tag.failed { background: #ef4444; color: white; }
+        .btn {
+            background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: opacity 0.3s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #1e2a3e;
+            color: #8a9aae;
+        }
+        .btn-outline:hover { background: #1e2a3e; }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #4a5a6e;
+        }
+        .empty-state .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+        .filters {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .filters select, .filters input {
+            padding: 8px 12px;
+            background: #0d1422;
+            border: 1px solid #1e2a3e;
+            border-radius: 6px;
+            color: #e0e6ed;
+            font-size: 13px;
+        }
+        .filters select:focus, .filters input:focus {
+            outline: none;
+            border-color: #6c5ce7;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #4a5a6e;
+            font-size: 13px;
+            border-top: 1px solid #1a1f2e;
+            margin-top: 30px;
+        }
+        .loading { color: #6a7a8e; font-style: italic; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        @media (max-width: 768px) {
+            .grid-2 { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌐 Universal Blockchain Platform</h1>
+        <span class="version">v2.0.0</span>
+    </div>
+    <div class="nav">
+        <a href="/">Home</a>
+        <a href="/ethereum">🟣 Ethereum</a>
+        <a href="/bitcoin">🟠 Bitcoin</a>
+        <a href="/tron">🔴 TRON</a>
+        <a href="/dashboard" class="active">📊 Dashboard</a>
+        <a href="/history">📜 History</a>
+    </div>
+
+    <div class="container">
+        <div class="page-title">
+            <span>📊</span> Analytics Dashboard
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="stats">
+            <div class="stat-card">
+                <div class="number" id="total-inspections">-</div>
+                <div class="label">Total Inspections</div>
+            </div>
+            <div class="stat-card ethereum">
+                <div class="number" id="eth-inspections">-</div>
+                <div class="label">🟣 Ethereum</div>
+            </div>
+            <div class="stat-card bitcoin">
+                <div class="number" id="btc-inspections">-</div>
+                <div class="label">🟠 Bitcoin</div>
+            </div>
+            <div class="stat-card tron">
+                <div class="number" id="tron-inspections">-</div>
+                <div class="label">🔴 TRON</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="total-transactions">-</div>
+                <div class="label">Total Transactions</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="cache-count">-</div>
+                <div class="label">Cache Entries</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid-2">
+            <div class="card">
+                <h3>📈 Inspections by Blockchain</h3>
+                <div id="chart-inspections" style="height:200px; display:flex; align-items:flex-end; gap:20px; padding-top:20px;">
+                    <div style="flex:1; text-align:center;">
+                        <div id="eth-bar" style="background:#6c5ce7; border-radius:4px 4px 0 0; height:0px; transition:height 0.5s;"></div>
+                        <div style="color:#8a9aae; font-size:12px; margin-top:4px;">Ethereum</div>
+                        <div id="eth-count" style="color:#e0e6ed; font-size:14px; font-weight:600;">0</div>
+                    </div>
+                    <div style="flex:1; text-align:center;">
+                        <div id="btc-bar" style="background:#f7931a; border-radius:4px 4px 0 0; height:0px; transition:height 0.5s;"></div>
+                        <div style="color:#8a9aae; font-size:12px; margin-top:4px;">Bitcoin</div>
+                        <div id="btc-count" style="color:#e0e6ed; font-size:14px; font-weight:600;">0</div>
+                    </div>
+                    <div style="flex:1; text-align:center;">
+                        <div id="tron-bar" style="background:#ef4444; border-radius:4px 4px 0 0; height:0px; transition:height 0.5s;"></div>
+                        <div style="color:#8a9aae; font-size:12px; margin-top:4px;">TRON</div>
+                        <div id="tron-count" style="color:#e0e6ed; font-size:14px; font-weight:600;">0</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h3>🔍 Recent Activity</h3>
+                <div id="recent-activity" style="max-height:200px; overflow-y:auto;">
+                    <div class="empty-state">
+                        <span class="emoji">⏳</span>
+                        Loading activity...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export -->
+        <div class="card">
+            <h3>📤 Export Data</h3>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                <button class="btn" onclick="exportData('wallet')">Export Wallets</button>
+                <button class="btn" onclick="exportData('contract')">Export Contracts</button>
+                <button class="btn" onclick="exportData('transaction')">Export Transactions</button>
+                <button class="btn btn-outline" onclick="exportData('all')">Export All</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        Universal Blockchain Platform (UBP) v2.0.0 &bull; Built with ❤️
+    </div>
+
+    <script>
+        async function loadDashboard() {
+            try {
+                // Load stats
+                const statsResponse = await fetch('/api/dashboard/stats');
+                const stats = await statsResponse.json();
+                
+                document.getElementById('total-inspections').textContent = stats.total_inspections || 0;
+                document.getElementById('eth-inspections').textContent = stats.ethereum || 0;
+                document.getElementById('btc-inspections').textContent = stats.bitcoin || 0;
+                document.getElementById('tron-inspections').textContent = stats.tron || 0;
+                document.getElementById('total-transactions').textContent = stats.total_transactions || 0;
+                document.getElementById('cache-count').textContent = stats.cache_entries || 0;
+
+                // Update bar chart
+                const maxVal = Math.max(stats.ethereum || 0, stats.bitcoin || 0, stats.tron || 0, 1);
+                const maxHeight = 150;
+                
+                document.getElementById('eth-bar').style.height = ((stats.ethereum || 0) / maxVal * maxHeight) + 'px';
+                document.getElementById('btc-bar').style.height = ((stats.bitcoin || 0) / maxVal * maxHeight) + 'px';
+                document.getElementById('tron-bar').style.height = ((stats.tron || 0) / maxVal * maxHeight) + 'px';
+                document.getElementById('eth-count').textContent = stats.ethereum || 0;
+                document.getElementById('btc-count').textContent = stats.bitcoin || 0;
+                document.getElementById('tron-count').textContent = stats.tron || 0;
+
+                // Load recent activity
+                const activityResponse = await fetch('/api/dashboard/recent');
+                const activities = await activityResponse.json();
+                const container = document.getElementById('recent-activity');
+                
+                if (activities.length === 0) {
+                    container.innerHTML = `<div class="empty-state"><span class="emoji">📭</span>No recent activity</div>`;
+                } else {
+                    container.innerHTML = activities.map(a => `
+                        <div style="padding:8px 0; border-bottom:1px solid #1a1f2e; display:flex; justify-content:space-between; align-items:center;">
+                            <span>
+                                <span class="tag ${a.blockchain}">${a.blockchain}</span>
+                                ${a.type}
+                                <span style="color:#6a7a8e; font-size:11px; font-family:monospace;">${a.address || a.tx_hash || ''}</span>
+                            </span>
+                            <span style="color:#4a5a6e; font-size:11px;">${a.created_at}</span>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error('Error loading dashboard:', e);
+            }
+        }
+
+        async function exportData(type) {
+            try {
+                const response = await fetch(`/api/export/${type}`);
+                const data = await response.json();
+                
+                // Create CSV
+                let csv = '';
+                if (data.length > 0) {
+                    const headers = Object.keys(data[0]);
+                    csv = headers.join(',') + '\n';
+                    data.forEach(row => {
+                        csv += headers.map(h => {
+                            let val = row[h] || '';
+                            if (typeof val === 'string' && val.includes(',')) {
+                                val = `"${val}"`;
+                            }
+                            return val;
+                        }).join(',') + '\n';
+                    });
+                }
+                
+                // Download CSV
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `ubp_export_${type}_${new Date().toISOString().slice(0,10)}.csv`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Error exporting data: ' + e.message);
+            }
+        }
+
+        // Load dashboard on page load
+        loadDashboard();
+    </script>
+</body>
+</html>

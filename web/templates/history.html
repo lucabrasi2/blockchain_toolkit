@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History - UBP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e17;
+            color: #e0e6ed;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1f2e, #0d1220);
+            padding: 20px 40px;
+            border-bottom: 1px solid #2a3a5a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .version { color: #6a7a8e; font-size: 14px; }
+        .nav {
+            display: flex;
+            gap: 20px;
+            background: #141b2b;
+            padding: 12px 40px;
+            border-bottom: 1px solid #1e2a3e;
+        }
+        .nav a {
+            color: #8a9aae;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s;
+            font-size: 15px;
+        }
+        .nav a:hover { background: #1e2a3e; color: #e0e6ed; }
+        .nav a.active { background: #6c5ce7; color: white; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 28px;
+            margin-bottom: 24px;
+        }
+        .filters {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filters select, .filters input {
+            padding: 8px 12px;
+            background: #0d1422;
+            border: 1px solid #1e2a3e;
+            border-radius: 6px;
+            color: #e0e6ed;
+            font-size: 13px;
+        }
+        .filters select:focus, .filters input:focus {
+            outline: none;
+            border-color: #6c5ce7;
+        }
+        .filters button {
+            background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: opacity 0.3s;
+        }
+        .filters button:hover { opacity: 0.85; }
+        .card {
+            background: #141b2b;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #1e2a3e;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            text-align: left;
+            padding: 10px 12px;
+            color: #8a9aae;
+            border-bottom: 1px solid #1e2a3e;
+            font-weight: 600;
+        }
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #1a1f2e;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        td .tag {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .tag.ethereum { background: #6c5ce7; color: white; }
+        .tag.bitcoin { background: #f7931a; color: white; }
+        .tag.tron { background: #ef4444; color: white; }
+        .tag.success { background: #00b894; color: #0a0e17; }
+        .tag.failed { background: #ef4444; color: white; }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #4a5a6e;
+        }
+        .empty-state .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+        .pagination {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 16px;
+        }
+        .pagination button {
+            padding: 6px 12px;
+            background: #0d1422;
+            border: 1px solid #1e2a3e;
+            border-radius: 4px;
+            color: #8a9aae;
+            cursor: pointer;
+        }
+        .pagination button.active {
+            background: #6c5ce7;
+            border-color: #6c5ce7;
+            color: white;
+        }
+        .pagination button:hover { background: #1e2a3e; }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #4a5a6e;
+            font-size: 13px;
+            border-top: 1px solid #1a1f2e;
+            margin-top: 30px;
+        }
+        .loading { color: #6a7a8e; font-style: italic; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌐 Universal Blockchain Platform</h1>
+        <span class="version">v2.0.0</span>
+    </div>
+    <div class="nav">
+        <a href="/">Home</a>
+        <a href="/ethereum">🟣 Ethereum</a>
+        <a href="/bitcoin">🟠 Bitcoin</a>
+        <a href="/tron">🔴 TRON</a>
+        <a href="/dashboard">📊 Dashboard</a>
+        <a href="/history" class="active">📜 History</a>
+    </div>
+
+    <div class="container">
+        <div class="page-title">
+            <span>📜</span> Inspection History
+        </div>
+
+        <div class="card">
+            <div class="filters">
+                <select id="filter-blockchain">
+                    <option value="">All Blockchains</option>
+                    <option value="ethereum">🟣 Ethereum</option>
+                    <option value="bitcoin">🟠 Bitcoin</option>
+                    <option value="tron">🔴 TRON</option>
+                </select>
+                <select id="filter-type">
+                    <option value="">All Types</option>
+                    <option value="wallet">Wallet</option>
+                    <option value="contract">Contract</option>
+                    <option value="transaction">Transaction</option>
+                </select>
+                <input type="text" id="filter-address" placeholder="Search address or hash..." style="min-width:200px;">
+                <button onclick="loadHistory()">Search</button>
+                <button onclick="resetFilters()" style="background:#1e2a3e;">Reset</button>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Blockchain</th>
+                            <th>Address / Hash</th>
+                            <th>Details</th>
+                            <th>Status</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body">
+                        <tr><td colspan="6" class="empty-state"><span class="emoji">⏳</span>Loading history...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <div class="footer">
+        Universal Blockchain Platform (UBP) v2.0.0 &bull; Built with ❤️
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let totalPages = 1;
+
+        async function loadHistory(page = 1) {
+            currentPage = page;
+            
+            const blockchain = document.getElementById('filter-blockchain').value;
+            const type = document.getElementById('filter-type').value;
+            const search = document.getElementById('filter-address').value;
+
+            const params = new URLSearchParams({
+                page: page,
+                limit: 20,
+                blockchain: blockchain,
+                type: type,
+                search: search
+            });
+
+            try {
+                const response = await fetch(`/api/history?${params}`);
+                const data = await response.json();
+                
+                const tbody = document.getElementById('history-body');
+                totalPages = data.total_pages || 1;
+
+                if (data.items && data.items.length > 0) {
+                    tbody.innerHTML = data.items.map(item => `
+                        <tr>
+                            <td><span class="tag ${item.type}">${item.type}</span></td>
+                            <td><span class="tag ${item.blockchain}">${item.blockchain}</span></td>
+                            <td style="font-family:monospace;font-size:11px;">${item.address || item.tx_hash || 'N/A'}</td>
+                            <td>${item.details || 'N/A'}</td>
+                            <td>${item.status ? `<span class="tag success">Success</span>` : item.status === false ? `<span class="tag failed">Failed</span>` : 'N/A'}</td>
+                            <td style="color:#4a5a6e;font-size:11px;">${item.created_at || 'N/A'}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><span class="emoji">📭</span>No history found</td></tr>`;
+                }
+
+                // Update pagination
+                renderPagination();
+            } catch (e) {
+                console.error('Error loading history:', e);
+                document.getElementById('history-body').innerHTML = `<tr><td colspan="6" class="empty-state"><span class="emoji">❌</span>Error loading history</td></tr>`;
+            }
+        }
+
+        function renderPagination() {
+            const container = document.getElementById('pagination');
+            let html = '';
+            if (currentPage > 1) {
+                html += `<button onclick="loadHistory(${currentPage - 1})">← Prev</button>`;
+            }
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === currentPage) {
+                    html += `<button class="active">${i}</button>`;
+                } else if (i <= 5 || i > totalPages - 2 || Math.abs(i - currentPage) <= 1) {
+                    html += `<button onclick="loadHistory(${i})">${i}</button>`;
+                } else if (i === 6 && currentPage > 5) {
+                    html += `<button disabled>...</button>`;
+                }
+            }
+            if (currentPage < totalPages) {
+                html += `<button onclick="loadHistory(${currentPage + 1})">Next →</button>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function resetFilters() {
+            document.getElementById('filter-blockchain').value = '';
+            document.getElementById('filter-type').value = '';
+            document.getElementById('filter-address').value = '';
+            loadHistory(1);
+        }
+
+        // Load history on page load
+        loadHistory(1);
+    </script>
+</body>
+</html>
