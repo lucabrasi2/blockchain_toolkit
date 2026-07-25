@@ -13,7 +13,10 @@ Author: Jaramogi Diddy
 Project: Universal Blockchain Platform (UBP)
 Version: 2.0.0
 """
+from database import get_db_manager
 
+# Initialize database
+db = get_db_manager()
 import sys
 
 from core.logger import get_logger
@@ -122,8 +125,16 @@ class App:
             address = get_address_input("Enter Ethereum wallet address")
             if not address:
                 return
+            
             print("\n⏳ Inspecting wallet...")
             report = self.ethereum_controller.wallet_inspector(address)
+            
+            # Save to database
+            try:
+                db.save_wallet_inspection(address, 'ethereum', report)
+            except Exception as e:
+                logger.warning(f"Could not save to database: {e}")
+            
             WalletDisplay.display_wallet_report(report)
         except Exception as error:
             print_error(str(error))
