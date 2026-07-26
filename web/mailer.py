@@ -256,6 +256,11 @@ Universal Blockchain Platform Team
     return send_email(to, subject, body, html)
 
 
+def send_notification_email(to, subject, body, html=None):
+    """Send a general notification email."""
+    return send_email(to, subject, body, html)
+
+
 ###############################################################################
 # End of File
 ###############################################################################

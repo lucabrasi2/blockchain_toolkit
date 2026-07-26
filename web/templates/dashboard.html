@@ -23,6 +23,7 @@
         .header h1 {
             font-size: 28px;
             background: linear-gradient(135deg, #6c5ce7, #00b894);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -69,6 +70,7 @@
             font-size: 32px;
             font-weight: bold;
             background: linear-gradient(135deg, #6c5ce7, #00b894);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -79,11 +81,20 @@
         }
         .stat-card.bitcoin .number {
             background: linear-gradient(135deg, #f7931a, #e6841a);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
         .stat-card.tron .number {
             background: linear-gradient(135deg, #ef4444, #dc2626);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-card.latest-block .number {
+            font-size: 24px;
+            background: linear-gradient(135deg, #00b894, #00a884);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -107,6 +118,15 @@
             align-items: center;
             gap: 8px;
         }
+        .card h3 .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-left: 8px;
+        }
+        .card h3 .status-dot.online { background: #00b894; }
+        .card h3 .status-dot.offline { background: #ef4444; }
         .table-container {
             overflow-x: auto;
         }
@@ -140,6 +160,7 @@
         .tag.tron { background: #ef4444; color: white; }
         .tag.success { background: #00b894; color: #0a0e17; }
         .tag.failed { background: #ef4444; color: white; }
+        .tag.pending { background: #f59e0b; color: #0a0e17; }
         .btn {
             background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
             color: white;
@@ -197,9 +218,73 @@
             font-size: 10px;
             font-weight: 600;
         }
+        .ws-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #8a9aae;
+        }
+        .ws-status .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .ws-status .dot.connected { background: #00b894; }
+        .ws-status .dot.disconnected { background: #ef4444; }
         @media (max-width: 768px) {
             .grid-2 { grid-template-columns: 1fr; }
             .stats-grid { grid-template-columns: 1fr 1fr; }
+        }
+        /* Live feed styling */
+        .live-feed {
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .live-feed .feed-item {
+            padding: 6px 0;
+            border-bottom: 1px solid #1a1f2e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .live-feed .feed-item .time {
+            color: #4a5a6e;
+            font-size: 11px;
+        }
+        .live-feed .feed-item .blockchain-tag {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-right: 6px;
+        }
+        .live-feed .feed-item .blockchain-tag.eth { background: #6c5ce7; color: white; }
+        .live-feed .feed-item .blockchain-tag.btc { background: #f7931a; color: white; }
+        .live-feed .feed-item .blockchain-tag.trx { background: #ef4444; color: white; }
+        .live-feed::-webkit-scrollbar {
+            width: 4px;
+        }
+        .live-feed::-webkit-scrollbar-track {
+            background: #0d1422;
+        }
+        .live-feed::-webkit-scrollbar-thumb {
+            background: #1e2a3e;
+            border-radius: 4px;
+        }
+        .block-number {
+            font-weight: bold;
+            color: #6c5ce7;
+        }
+        .tx-count {
+            color: #8a9aae;
+        }
+        .live-feed-empty {
+            color: #4a5a6e;
+            text-align: center;
+            padding: 20px;
         }
     </style>
 </head>
@@ -215,11 +300,17 @@
         <a href="/tron">🔴 TRON</a>
         <a href="/dashboard" class="active">📊 Dashboard</a>
         <a href="/history">📜 History</a>
+        <a href="/auth/profile">👤 Profile</a>
+        <a href="/auth/logout">🚪 Logout</a>
     </div>
 
     <div class="container">
         <div class="page-title">
-            <span>📊</span> Analytics Dashboard
+            <span>📊</span> Real-Time Dashboard
+            <span class="ws-status" style="margin-left:auto;">
+                <span class="dot connected" id="ws-dot"></span>
+                <span id="ws-status-text">Connected</span>
+            </span>
         </div>
 
         <!-- Stats -->
@@ -244,17 +335,26 @@
                 <div class="number" id="total-transactions">-</div>
                 <div class="label">Total Transactions</div>
             </div>
-            <div class="stat-card">
-                <div class="number" id="cache-count">-</div>
-                <div class="label">Cache Entries</div>
+            <div class="stat-card latest-block">
+                <div class="number" id="latest-block">-</div>
+                <div class="label">Latest Block</div>
             </div>
         </div>
 
-        <!-- Charts -->
+        <!-- Live Feed & Chart -->
         <div class="grid-2">
             <div class="card">
-                <h3>📈 Inspections by Blockchain</h3>
-                <div id="chart-inspections" style="height:200px; display:flex; align-items:flex-end; gap:20px; padding-top:20px;">
+                <h3>
+                    🔴 Live Block Feed
+                    <span class="status-dot online" id="feed-status"></span>
+                </h3>
+                <div class="live-feed" id="live-feed">
+                    <div class="live-feed-empty">⏳ Waiting for new blocks...</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3>📈 Activity Chart</h3>
+                <div id="chart-container" style="height:280px; display:flex; align-items:flex-end; gap:16px; padding-top:20px;">
                     <div style="flex:1; text-align:center;">
                         <div id="eth-bar" style="background:#6c5ce7; border-radius:4px 4px 0 0; height:0px; transition:height 0.5s;"></div>
                         <div style="color:#8a9aae; font-size:12px; margin-top:4px;">Ethereum</div>
@@ -269,15 +369,6 @@
                         <div id="tron-bar" style="background:#ef4444; border-radius:4px 4px 0 0; height:0px; transition:height 0.5s;"></div>
                         <div style="color:#8a9aae; font-size:12px; margin-top:4px;">TRON</div>
                         <div id="tron-count" style="color:#e0e6ed; font-size:14px; font-weight:600;">0</div>
-                    </div>
-                </div>
-            </div>
-            <div class="card">
-                <h3>🔍 Recent Activity</h3>
-                <div id="recent-activity" style="max-height:200px; overflow-y:auto;">
-                    <div class="empty-state">
-                        <span class="emoji">⏳</span>
-                        Loading activity...
                     </div>
                 </div>
             </div>
@@ -299,61 +390,143 @@
         Universal Blockchain Platform (UBP) v2.0.0 &bull; Built with ❤️
     </div>
 
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
+        // ============ WebSocket Connection ============
+        const socket = io();
+
+        // Connection status
+        socket.on('connect', function() {
+            document.getElementById('ws-dot').className = 'dot connected';
+            document.getElementById('ws-status-text').textContent = 'Connected';
+            document.getElementById('feed-status').className = 'status-dot online';
+            console.log('🔌 WebSocket connected');
+            addFeedItem('system', 'WebSocket connected', 'info');
+        });
+
+        socket.on('disconnect', function() {
+            document.getElementById('ws-dot').className = 'dot disconnected';
+            document.getElementById('ws-status-text').textContent = 'Disconnected';
+            document.getElementById('feed-status').className = 'status-dot offline';
+            console.log('🔌 WebSocket disconnected');
+            addFeedItem('system', 'WebSocket disconnected', 'error');
+        });
+
+        // Subscribe to block updates
+        socket.emit('subscribe_block', { blockchain: 'ethereum' });
+        socket.emit('subscribe_block', { blockchain: 'bitcoin' });
+        socket.emit('subscribe_block', { blockchain: 'tron' });
+
+        // New block notification
+        socket.on('new_block', function(data) {
+            console.log('📦 New block:', data);
+            addFeedItem(data.blockchain, `New block #${data.block_number} (${data.transaction_count} tx)`, 'block');
+            updateLatestBlock(data.block_number);
+            updateBlockCounter(data.blockchain, data.block_number);
+        });
+
+        // Message handler
+        socket.on('message', function(data) {
+            console.log('📨 Message:', data);
+            if (data.type === 'subscribed_block') {
+                addFeedItem('system', data.data, 'info');
+            }
+        });
+
+        // Error handler
+        socket.on('error', function(data) {
+            console.error('❌ WebSocket error:', data);
+            addFeedItem('system', `Error: ${data.message}`, 'error');
+        });
+
+        // ============ Live Feed ============
+        function addFeedItem(source, message, type) {
+            const container = document.getElementById('live-feed');
+            // Remove empty state if present
+            const empty = container.querySelector('.live-feed-empty');
+            if (empty) empty.remove();
+
+            const item = document.createElement('div');
+            item.className = 'feed-item';
+
+            const colors = {
+                'ethereum': 'eth',
+                'bitcoin': 'btc',
+                'tron': 'trx',
+                'system': 'eth',
+                'info': 'eth',
+                'error': 'eth',
+                'block': 'eth'
+            };
+            const tagClass = colors[source] || 'eth';
+            const displayName = source.charAt(0).toUpperCase() + source.slice(1);
+
+            let icon = '📦';
+            if (type === 'info') icon = 'ℹ️';
+            if (type === 'error') icon = '❌';
+            if (type === 'block') icon = '⛓️';
+
+            item.innerHTML = `
+                <span>
+                    <span class="blockchain-tag ${tagClass}">${displayName}</span>
+                    ${icon} ${message}
+                </span>
+                <span class="time">${new Date().toLocaleTimeString()}</span>
+            `;
+            container.prepend(item);
+
+            // Keep only last 30 items
+            while (container.children.length > 30) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        // ============ Update Functions ============
+        function updateLatestBlock(blockNumber) {
+            document.getElementById('latest-block').textContent = blockNumber;
+        }
+
+        function updateBlockCounter(blockchain, blockNumber) {
+            // For now, just update the latest block
+            // Could be extended to show per-chain blocks
+        }
+
+        function updateChart(ethCount, btcCount, tronCount) {
+            const maxVal = Math.max(ethCount || 0, btcCount || 0, tronCount || 0, 1);
+            const maxHeight = 200;
+
+            document.getElementById('eth-bar').style.height = ((ethCount || 0) / maxVal * maxHeight) + 'px';
+            document.getElementById('btc-bar').style.height = ((btcCount || 0) / maxVal * maxHeight) + 'px';
+            document.getElementById('tron-bar').style.height = ((tronCount || 0) / maxVal * maxHeight) + 'px';
+            document.getElementById('eth-count').textContent = ethCount || 0;
+            document.getElementById('btc-count').textContent = btcCount || 0;
+            document.getElementById('tron-count').textContent = tronCount || 0;
+        }
+
+        // ============ Load Dashboard Data ============
         async function loadDashboard() {
             try {
-                // Load stats
                 const statsResponse = await fetch('/api/dashboard/stats');
                 const stats = await statsResponse.json();
-                
+
                 document.getElementById('total-inspections').textContent = stats.total_inspections || 0;
                 document.getElementById('eth-inspections').textContent = stats.ethereum || 0;
                 document.getElementById('btc-inspections').textContent = stats.bitcoin || 0;
                 document.getElementById('tron-inspections').textContent = stats.tron || 0;
                 document.getElementById('total-transactions').textContent = stats.total_transactions || 0;
-                document.getElementById('cache-count').textContent = stats.cache_entries || 0;
 
-                // Update bar chart
-                const maxVal = Math.max(stats.ethereum || 0, stats.bitcoin || 0, stats.tron || 0, 1);
-                const maxHeight = 150;
-                
-                document.getElementById('eth-bar').style.height = ((stats.ethereum || 0) / maxVal * maxHeight) + 'px';
-                document.getElementById('btc-bar').style.height = ((stats.bitcoin || 0) / maxVal * maxHeight) + 'px';
-                document.getElementById('tron-bar').style.height = ((stats.tron || 0) / maxVal * maxHeight) + 'px';
-                document.getElementById('eth-count').textContent = stats.ethereum || 0;
-                document.getElementById('btc-count').textContent = stats.bitcoin || 0;
-                document.getElementById('tron-count').textContent = stats.tron || 0;
-
-                // Load recent activity
-                const activityResponse = await fetch('/api/dashboard/recent');
-                const activities = await activityResponse.json();
-                const container = document.getElementById('recent-activity');
-                
-                if (activities.length === 0) {
-                    container.innerHTML = `<div class="empty-state"><span class="emoji">📭</span>No recent activity</div>`;
-                } else {
-                    container.innerHTML = activities.map(a => `
-                        <div style="padding:8px 0; border-bottom:1px solid #1a1f2e; display:flex; justify-content:space-between; align-items:center;">
-                            <span>
-                                <span class="tag ${a.blockchain}">${a.blockchain}</span>
-                                ${a.type}
-                                <span style="color:#6a7a8e; font-size:11px; font-family:monospace;">${a.address || a.tx_hash || ''}</span>
-                            </span>
-                            <span style="color:#4a5a6e; font-size:11px;">${a.created_at}</span>
-                        </div>
-                    `).join('');
-                }
+                updateChart(stats.ethereum || 0, stats.bitcoin || 0, stats.tron || 0);
             } catch (e) {
                 console.error('Error loading dashboard:', e);
             }
         }
 
+        // ============ Export Data ============
         async function exportData(type) {
             try {
                 const response = await fetch(`/api/export/${type}`);
                 const data = await response.json();
-                
-                // Create CSV
+
                 let csv = '';
                 if (data.length > 0) {
                     const headers = Object.keys(data[0]);
@@ -368,8 +541,7 @@
                         }).join(',') + '\n';
                     });
                 }
-                
-                // Download CSV
+
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -382,8 +554,11 @@
             }
         }
 
-        // Load dashboard on page load
+        // ============ Initialize ============
         loadDashboard();
+
+        // Refresh stats every 30 seconds
+        setInterval(loadDashboard, 30000);
     </script>
 </body>
 </html>

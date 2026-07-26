@@ -18,6 +18,7 @@ This module handles:
     • API key generation and management
     • User roles and permissions
     • Email notifications
+    • Password reset via email
 
 Author
 ------
@@ -57,7 +58,7 @@ except ImportError:
     HAS_2FA = False
 
 from core.logger import get_logger
-from web.mailer import send_welcome_email, send_alert_email
+from web.mailer import send_welcome_email, send_alert_email, send_password_reset_email
 
 logger = get_logger(__name__)
 
@@ -70,6 +71,7 @@ bcrypt = Bcrypt()
 # JWT secret
 JWT_SECRET = os.getenv("JWT_SECRET", secrets.token_hex(32))
 JWT_EXPIRY = int(os.getenv("JWT_EXPIRY", "3600"))
+
 
 class User(UserMixin):
     """
@@ -149,6 +151,19 @@ class UserManager:
                     body TEXT,
                     sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     status TEXT DEFAULT 'pending',
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+
+            # Create reset tokens table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS reset_tokens (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    token_hash TEXT NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id)
                 )
             """)
@@ -350,6 +365,80 @@ class UserManager:
             logger.error(f"Error revoking API key: {e}")
             return False
 
+    # ============ Password Reset ============
+
+    def create_reset_token(self, email):
+        """Create a password reset token."""
+        try:
+            token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            expires_at = datetime.utcnow() + timedelta(hours=1)
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            user = self.get_user_by_email(email)
+            if not user:
+                return None
+            
+            cursor.execute("""
+                INSERT INTO reset_tokens (id, user_id, token_hash, expires_at)
+                VALUES (?, ?, ?, ?)
+            """, (secrets.token_urlsafe(12), user.id, token_hash, expires_at.isoformat()))
+            
+            conn.commit()
+            conn.close()
+            
+            return token
+        except Exception as e:
+            logger.error(f"Error creating reset token: {e}")
+            return None
+
+    def verify_reset_token(self, token):
+        """Verify a password reset token."""
+        try:
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT user_id, expires_at, used FROM reset_tokens
+                WHERE token_hash = ? AND used = 0
+            """, (token_hash,))
+            row = cursor.fetchone()
+            conn.close()
+            
+            if not row:
+                return None
+            
+            user_id, expires_at, used = row
+            
+            if datetime.utcnow() > datetime.fromisoformat(expires_at):
+                return None
+            
+            return user_id
+        except Exception as e:
+            logger.error(f"Error verifying reset token: {e}")
+            return None
+
+    def mark_token_used(self, token):
+        """Mark a reset token as used."""
+        try:
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE reset_tokens SET used = 1
+                WHERE token_hash = ?
+            """, (token_hash,))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Error marking token used: {e}")
+            return False
+
     # ============ Two-Factor Authentication ============
 
     def enable_2fa(self, user_id):
@@ -359,7 +448,6 @@ class UserManager:
             return None
 
         try:
-            # Generate secret
             secret = pyotp.random_base32()
 
             conn = sqlite3.connect(self.db_path)
@@ -428,7 +516,6 @@ class UserManager:
             if not row or not row[0]:
                 return None
 
-            # Generate QR code
             totp = pyotp.TOTP(row[0])
             uri = totp.provisioning_uri(username, issuer_name="UBP")
 
@@ -437,7 +524,6 @@ class UserManager:
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
 
-            # Convert to base64
             buffered = io.BytesIO()
             img.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
@@ -478,7 +564,6 @@ def authenticate_api_key(request):
     user = user_manager.get_user_by_api_key(api_key)
 
     if user:
-        # Update last used
         try:
             conn = sqlite3.connect(user_manager.db_path)
             cursor = conn.cursor()
@@ -496,8 +581,6 @@ def authenticate_api_key(request):
 
 def require_api_key(func):
     """Decorator to require API key authentication."""
-    from functools import wraps
-
     @wraps(func)
     def wrapper(*args, **kwargs):
         user = authenticate_api_key(request)
@@ -720,6 +803,77 @@ def change_password():
 
     flash('Password changed successfully!', 'success')
     return redirect(url_for('auth.profile'))
+
+
+# ============ Password Reset Routes ============
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """Forgot password page."""
+    if request.method == 'POST':
+        email = request.form.get('email')
+        
+        user_manager = get_user_manager()
+        user = user_manager.get_user_by_email(email)
+        
+        if user:
+            token = user_manager.create_reset_token(email)
+            if token:
+                send_password_reset_email(email, user.username, token)
+                flash('Password reset link sent to your email.', 'info')
+                return redirect(url_for('auth.login'))
+            else:
+                flash('Failed to create reset token. Please try again.', 'danger')
+        else:
+            flash('Email address not found.', 'danger')
+    
+    return render_template('forgot_password.html')
+
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    """Reset password page."""
+    token = request.args.get('token') or request.form.get('token')
+    
+    if not token:
+        flash('Invalid reset link.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+    
+    user_manager = get_user_manager()
+    user_id = user_manager.verify_reset_token(token)
+    
+    if not user_id:
+        flash('Invalid or expired reset token.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+    
+    if request.method == 'POST':
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'danger')
+            return render_template('reset_password.html', token=token)
+        
+        if len(password) < 8:
+            flash('Password must be at least 8 characters', 'danger')
+            return render_template('reset_password.html', token=token)
+        
+        # Update password
+        new_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        
+        conn = sqlite3.connect(user_manager.db_path)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (new_hash, user_id))
+        conn.commit()
+        conn.close()
+        
+        # Mark token as used
+        user_manager.mark_token_used(token)
+        
+        flash('Password reset successfully! Please login.', 'success')
+        return redirect(url_for('auth.login'))
+    
+    return render_template('reset_password.html', token=token)
 
 
 ###############################################################################

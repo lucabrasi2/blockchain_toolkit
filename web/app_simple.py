@@ -28,10 +28,12 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import sqlite3
 from flask import Flask, render_template, request, jsonify, session, flash, redirect, url_for
 from flask_cors import CORS
 from flask_login import LoginManager, login_required, current_user
 from flask_bcrypt import Bcrypt
+from flask_mail import Mail
 from datetime import datetime
 from functools import wraps
 
@@ -43,11 +45,27 @@ from core.logger import get_logger
 # Import authentication
 from web.auth import auth_bp, load_user, get_user_manager, require_api_key, authenticate_api_key
 
+# Import permissions
+from web.permissions import require_permission, Permission, require_role, has_permission
+
+# Import WebSocket
+from web.ws import socketio, init_socketio, start_monitoring
+
 logger = get_logger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Email configuration
+app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True') == 'True'
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER')
+
+mail = Mail(app)
 
 # Setup authentication
 login_manager = LoginManager()
@@ -131,6 +149,7 @@ def tron_page():
 
 @app.route('/dashboard')
 @login_required
+@require_permission(Permission.VIEW_DASHBOARD)
 def dashboard_page():
     """Dashboard page."""
     return render_template('dashboard.html')
@@ -138,6 +157,7 @@ def dashboard_page():
 
 @app.route('/history')
 @login_required
+@require_permission(Permission.VIEW_HISTORY)
 def history_page():
     """History page."""
     return render_template('history.html')
@@ -541,6 +561,7 @@ def history():
 
 @app.route('/api/export/<export_type>', methods=['GET'])
 @login_required
+@require_permission(Permission.EXPORT_DATA)
 def export_data(export_type):
     """Export data to CSV."""
     try:
@@ -597,6 +618,68 @@ def export_data(export_type):
         return jsonify({"error": str(e)}), 400
 
 
+# ============ User Management Endpoints (Admin Only) ============
+
+@app.route('/api/admin/users', methods=['GET'])
+@login_required
+@require_role('admin')
+def admin_users():
+    """Get all users (admin only)."""
+    try:
+        from database import get_db_manager
+        db = get_db_manager()
+        
+        conn = sqlite3.connect(db.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username, email, role, created_at, last_login, is_active FROM users')
+        rows = cursor.fetchall()
+        conn.close()
+        
+        users = []
+        for row in rows:
+            users.append({
+                "id": row[0],
+                "username": row[1],
+                "email": row[2],
+                "role": row[3],
+                "created_at": row[4],
+                "last_login": row[5],
+                "is_active": bool(row[6]),
+            })
+        
+        return jsonify(users)
+    except Exception as e:
+        logger.error(f"Admin users error: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route('/api/admin/users/<user_id>/role', methods=['PUT'])
+@login_required
+@require_role('admin')
+def admin_update_role(user_id):
+    """Update user role (admin only)."""
+    try:
+        data = request.json
+        role = data.get('role')
+        
+        if role not in ['admin', 'user', 'viewer', 'api']:
+            return jsonify({"error": "Invalid role"}), 400
+        
+        from database import get_db_manager
+        db = get_db_manager()
+        
+        conn = sqlite3.connect(db.db_path)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET role = ? WHERE id = ?', (role, user_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": f"User role updated to {role}"})
+    except Exception as e:
+        logger.error(f"Admin update role error: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
 # ============ Main Entry Point ============
 
 if __name__ == '__main__':
@@ -608,9 +691,19 @@ if __name__ == '__main__':
     logger.info(f"📍 History: http://localhost:5000/history")
     logger.info(f"📍 Login: http://localhost:5000/auth/login")
     logger.info(f"📍 Register: http://localhost:5000/auth/register")
+    logger.info(f"📍 Profile: http://localhost:5000/auth/profile")
+    logger.info("=" * 60)
+    logger.info("🔌 WebSocket running for real-time updates")
     logger.info("=" * 60)
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Initialize SocketIO
+    init_socketio(app)
+    
+    # Start monitoring threads
+    start_monitoring()
+    
+    # Run with SocketIO
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
 
 
 ###############################################################################
