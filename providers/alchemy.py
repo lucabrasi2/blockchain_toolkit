@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from core.logger import get_logger
-from providers.base import BaseProvider, ProviderType
+from providers.web3_provider import Web3Provider
 from providers.config import ProviderConfig
+from providers.provider_type import ProviderType
 
 logger = get_logger(__name__)
 
 
-class AlchemyProvider(BaseProvider):
+class AlchemyProvider(Web3Provider):
     """
     Enterprise Alchemy provider implementation.
 

@@ -37,10 +37,8 @@ from typing import Any
 
 from core.logger import get_logger
 
-from providers.base import (
-    BaseProvider,
-    ProviderType,
-)
+from providers.base import ProviderType
+from providers.web3_provider import Web3Provider
 
 from providers.config import ProviderConfig
 
@@ -52,7 +50,7 @@ logger = get_logger(__name__)
 ###############################################################################
 
 
-class InfuraProvider(BaseProvider):
+class InfuraProvider(Web3Provider):
     """
     Enterprise Infura provider.
 

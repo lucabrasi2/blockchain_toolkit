@@ -1,333 +1,204 @@
 """
-===============================================================================
+providers/config.py
+
 Universal Blockchain Platform (UBP)
 
-Module
-------
-providers.config
-
-Purpose
--------
-Enterprise provider configuration models.
-
-Defines standardized configuration objects used by
-all blockchain providers.
-
-Architecture
-------------
-UBP Enterprise Connectivity Framework
-
-Author
-------
-Jaramogi Diddy
-
-Platform
---------
-Universal Blockchain Platform (UBP)
-
-Version
--------
-2.0 Enterprise
-===============================================================================
+Defines the ProviderConfig class, the single configuration model
+used throughout the provider subsystem.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict
-from typing import Optional
-
-
-###############################################################################
-# Provider Configuration
-###############################################################################
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 
 
 @dataclass(slots=True)
 class ProviderConfig:
     """
-    Standard configuration shared by every provider.
+    Configuration object shared by all providers.
+
+    Every provider implementation (Alchemy, Infura, TRON, etc.)
+    receives an instance of this class.
+
+    This class is protocol-agnostic and contains no networking logic.
     """
 
-    ###########################################################################
-    # Identity
-    ###########################################################################
+    # ------------------------------------------------------------------
+    # Provider Identity
+    # ------------------------------------------------------------------
 
     provider: str
-
-    blockchain: str
-
     network: str
 
-    ###########################################################################
-    # Connectivity
-    ###########################################################################
-
-    endpoint: Optional[str] = None
-
-    websocket_endpoint: Optional[str] = None
-
-    ###########################################################################
+    # ------------------------------------------------------------------
     # Authentication
-    ###########################################################################
+    # ------------------------------------------------------------------
 
     api_key: Optional[str] = None
-
-    project_id: Optional[str] = None
-
+    api_secret: Optional[str] = None
     access_token: Optional[str] = None
 
-    secret_key: Optional[str] = None
+    # ------------------------------------------------------------------
+    # Connection
+    # ------------------------------------------------------------------
 
-    ###########################################################################
-    # Connection Settings
-    ###########################################################################
+    endpoint: Optional[str] = None
+    websocket_endpoint: Optional[str] = None
 
     timeout: int = 30
+    retries: int = 3
 
-    max_retries: int = 3
+    # ------------------------------------------------------------------
+    # Optional Configuration
+    # ------------------------------------------------------------------
 
-    verify_ssl: bool = True
+    enabled: bool = True
 
-    ###########################################################################
-    # Custom Headers
-    ###########################################################################
+    options: Dict[str, Any] = field(default_factory=dict)
 
-    headers: Optional[Dict[str, str]] = None
-###############################################################################
-# Configuration Helpers
-###############################################################################
+    metadata: Dict[str, Any] = field(default_factory=dict)
+        # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
 
-    def validate(self) -> bool:
+    def __post_init__(self) -> None:
         """
-        Validate provider configuration.
-
-        Returns
-        -------
-        bool
-            True if configuration appears valid.
+        Validate configuration immediately after initialization.
         """
+
+        self.provider = self.provider.strip().lower()
+        self.network = self.network.strip().lower()
 
         if not self.provider:
-
-            return False
-
-        if not self.blockchain:
-
-            return False
+            raise ValueError("Provider name cannot be empty.")
 
         if not self.network:
+            raise ValueError("Network name cannot be empty.")
 
-            return False
+        if self.timeout <= 0:
+            raise ValueError("Timeout must be greater than zero.")
 
-        return True
+        if self.retries < 0:
+            raise ValueError("Retries cannot be negative.")
 
-
-
-    @property
-    def authenticated(self) -> bool:
-        """
-        Determine whether authentication
-        credentials are configured.
-        """
-
-        return any(
-
-            (
-
-                self.api_key,
-
-                self.project_id,
-
-                self.access_token,
-
-                self.secret_key,
-
-            )
-
-        )
-
-
+    # ------------------------------------------------------------------
+    # Convenience Properties
+    # ------------------------------------------------------------------
 
     @property
-    def uses_websocket(self) -> bool:
+    def has_api_key(self) -> bool:
+        """Return True if an API key is configured."""
+        return bool(self.api_key)
+
+    @property
+    def has_api_secret(self) -> bool:
+        """Return True if an API secret is configured."""
+        return bool(self.api_secret)
+
+    @property
+    def has_access_token(self) -> bool:
+        """Return True if an access token is configured."""
+        return bool(self.access_token)
+
+    @property
+    def has_endpoint(self) -> bool:
+        """Return True if a custom endpoint has been supplied."""
+        return bool(self.endpoint)
+
+    @property
+    def has_websocket(self) -> bool:
+        """Return True if a websocket endpoint has been supplied."""
+        return bool(self.websocket_endpoint)
+
+    # ------------------------------------------------------------------
+    # Utility Methods
+    # ------------------------------------------------------------------
+
+    def copy(self, **updates: Any) -> "ProviderConfig":
         """
-        Determine whether WebSocket
-        connectivity is configured.
+        Return a new ProviderConfig with optional field overrides.
         """
 
-        return bool(
+        data = self.to_dict()
+        data.update(updates)
 
-            self.websocket_endpoint
+        return ProviderConfig(**data)
+        # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
 
-        )
-
-
-
-    def to_dict(
-        self,
-    ) -> Dict[str, object]:
+    def to_dict(self) -> Dict[str, Any]:
         """
-        Serialize the configuration.
-
-        Returns
-        -------
-        dict
-            Configuration dictionary.
+        Serialize this configuration to a dictionary.
         """
 
         return {
-
-            "provider":
-                self.provider,
-
-            "blockchain":
-                self.blockchain,
-
-            "network":
-                self.network,
-
-            "endpoint":
-                self.endpoint,
-
-            "websocket_endpoint":
-                self.websocket_endpoint,
-
-            "api_key":
-                self.api_key,
-
-            "project_id":
-                self.project_id,
-
-            "access_token":
-                self.access_token,
-
-            "secret_key":
-                self.secret_key,
-
-            "timeout":
-                self.timeout,
-
-            "max_retries":
-                self.max_retries,
-
-            "verify_ssl":
-                self.verify_ssl,
-
-            "headers":
-                self.headers,
-
+            "provider": self.provider,
+            "network": self.network,
+            "api_key": self.api_key,
+            "api_secret": self.api_secret,
+            "access_token": self.access_token,
+            "endpoint": self.endpoint,
+            "websocket_endpoint": self.websocket_endpoint,
+            "timeout": self.timeout,
+            "retries": self.retries,
+            "enabled": self.enabled,
+            "options": dict(self.options),
+            "metadata": dict(self.metadata),
         }
-    ###############################################################################
-# Factory Methods
-###############################################################################
 
     @classmethod
-    def from_dict(
-        cls,
-        data: Dict[str, object],
-    ) -> "ProviderConfig":
+    def from_dict(cls, data: Dict[str, Any]) -> "ProviderConfig":
         """
         Create a ProviderConfig from a dictionary.
-
-        Parameters
-        ----------
-        data : Dict[str, object]
-            Configuration dictionary.
-
-        Returns
-        -------
-        ProviderConfig
         """
 
-        return cls(
+        return cls(**data)
 
-            provider=str(
-                data.get("provider", "")
-            ),
+    # ------------------------------------------------------------------
+    # Representation
+    # ------------------------------------------------------------------
 
-            blockchain=str(
-                data.get("blockchain", "")
-            ),
-
-            network=str(
-                data.get("network", "")
-            ),
-
-            endpoint=data.get("endpoint"),
-
-            websocket_endpoint=data.get(
-                "websocket_endpoint"
-            ),
-
-            api_key=data.get("api_key"),
-
-            project_id=data.get("project_id"),
-
-            access_token=data.get(
-                "access_token"
-            ),
-
-            secret_key=data.get(
-                "secret_key"
-            ),
-
-            timeout=int(
-                data.get("timeout", 30)
-            ),
-
-            max_retries=int(
-                data.get("max_retries", 3)
-            ),
-
-            verify_ssl=bool(
-                data.get("verify_ssl", True)
-            ),
-
-            headers=data.get("headers"),
-
-        )
-
-
-
-###############################################################################
-# Object Protocol
-###############################################################################
-
-    def __str__(
-        self,
-    ) -> str:
+    def __repr__(self) -> str:
         """
-        Human-readable configuration.
+        Return a safe string representation.
+
+        Sensitive authentication values are intentionally omitted.
         """
 
         return (
-
-            f"{self.provider}"
-
-            f" ({self.blockchain})"
-
-            f" [{self.network}]"
-
+            f"{self.__class__.__name__}("
+            f"provider={self.provider!r}, "
+            f"network={self.network!r}, "
+            f"endpoint={self.endpoint!r}, "
+            f"websocket_endpoint={self.websocket_endpoint!r}, "
+            f"timeout={self.timeout}, "
+            f"retries={self.retries}, "
+            f"enabled={self.enabled})"
         )
 
+    # ------------------------------------------------------------------
+    # Helper Methods
+    # ------------------------------------------------------------------
 
-
-    def __repr__(
-        self,
-    ) -> str:
+    def is_enabled(self) -> bool:
         """
-        Developer representation.
+        Return True if this provider is enabled.
         """
 
-        return (
+        return self.enabled
 
-            f"ProviderConfig("
+    def enable(self) -> None:
+        """
+        Enable this provider.
+        """
 
-            f"provider='{self.provider}', "
+        self.enabled = True
 
-            f"blockchain='{self.blockchain}', "
+    def disable(self) -> None:
+        """
+        Disable this provider.
+        """
 
-            f"network='{self.network}')"
-
-        )
+        self.enabled = False

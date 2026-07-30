@@ -1,240 +1,136 @@
 """
-===============================================================================
+providers/exceptions.py
+
 Universal Blockchain Platform (UBP)
 
-Module
-------
-providers.exceptions
-
-Purpose
--------
-Provider subsystem exception hierarchy.
-===============================================================================
+Defines the exception hierarchy used throughout the provider
+subsystem.
 """
 
 from __future__ import annotations
 
 
-
-###############################################################################
-# Base
-###############################################################################
-
-
 class ProviderError(Exception):
     """
-    Base provider exception.
+    Base exception for all provider-related errors.
+
+    All custom provider exceptions should inherit from this class.
     """
 
+    pass
 
 
-###############################################################################
-# Discovery / Availability
-###############################################################################
-
-
-class ProviderNotFoundError(
-    ProviderError
-):
+class ProviderConfigurationError(ProviderError):
     """
-    Provider was not found.
+    Raised when a provider configuration is invalid or incomplete.
     """
 
+    pass
 
 
-class ProviderUnavailableError(
-    ProviderError
-):
+class ProviderConnectionError(ProviderError):
     """
-    Provider exists but is unavailable.
-    """
-
-
-
-class ProviderHealthCheckError(
-    ProviderError
-):
-    """
-    Provider health check failed.
+    Raised when a provider cannot establish or maintain a connection.
     """
 
+    pass
 
 
-###############################################################################
-# Configuration / Validation
-###############################################################################
-
-
-class ProviderConfigurationError(
-    ProviderError
-):
+class ProviderAuthenticationError(ProviderError):
     """
-    Invalid provider configuration.
+    Raised when authentication with a provider fails.
     """
 
-
-
-class ProviderValidationError(
-    ProviderError
-):
+    pass
+class ProviderNotFoundError(ProviderError):
     """
-    Provider validation failed.
+    Raised when a requested provider cannot be found.
     """
 
+    pass
 
 
-###############################################################################
-# Operations
-###############################################################################
-
-
-class ProviderUnsupportedOperationError(
-    ProviderError
-):
+class ProviderAlreadyRegisteredError(ProviderError):
     """
-    Operation is not supported by provider.
+    Raised when attempting to register a provider that already exists.
     """
 
+    pass
 
 
-class ProviderOperationError(
-    ProviderError
-):
+class ProviderRegistrationError(ProviderError):
     """
-    General provider operation failure.
-    """
-
-
-
-###############################################################################
-# Connection / Network
-###############################################################################
-
-
-class ProviderConnectionError(
-    ProviderError
-):
-    """
-    Connection failure.
+    Raised when provider registration fails.
     """
 
+    pass
 
 
-class ProviderNetworkError(
-    ProviderError
-):
+class ProviderInitializationError(ProviderError):
     """
-    Blockchain network communication failure.
-    """
-
-
-
-class ProviderTimeoutError(
-    ProviderError
-):
-    """
-    Provider request timed out.
+    Raised when a provider cannot be initialized.
     """
 
+    pass
 
 
-###############################################################################
-# Authentication / Security
-###############################################################################
-
-
-class ProviderAuthenticationError(
-    ProviderError
-):
+class ProviderHealthCheckError(ProviderError):
     """
-    Authentication failed.
+    Raised when a provider health check fails.
     """
 
+    pass
 
 
-class ProviderPermissionError(
-    ProviderError
-):
+class ProviderTimeoutError(ProviderConnectionError):
     """
-    Provider permission denied.
-    """
-
-
-
-###############################################################################
-# Transaction
-###############################################################################
-
-
-class ProviderTransactionError(
-    ProviderError
-):
-    """
-    Transaction processing error.
+    Raised when a provider operation exceeds the configured timeout.
     """
 
-
-
-class ProviderTransactionRejectedError(
-    ProviderTransactionError
-):
+    pass
+class ProviderUnavailableError(ProviderError):
     """
-    Transaction rejected.
+    Raised when a provider is currently unavailable.
     """
 
+    pass
 
 
-###############################################################################
-# Limits
-###############################################################################
-
-
-class ProviderRateLimitError(
-    ProviderError
-):
+class ProviderRequestError(ProviderError):
     """
-    Provider rate limit exceeded.
+    Raised when a provider request fails.
     """
 
+    pass
 
 
-###############################################################################
-# Public API
-###############################################################################
+class ProviderResponseError(ProviderError):
+    """
+    Raised when a provider returns an invalid or unexpected response.
+    """
+
+    pass
 
 
-__all__ = [
+class ProviderFailoverError(ProviderError):
+    """
+    Raised when automatic provider failover fails.
+    """
 
-    "ProviderError",
+    pass
 
-    "ProviderNotFoundError",
 
-    "ProviderUnavailableError",
+class ProviderRateLimitError(ProviderError):
+    """
+    Raised when a provider rate limit has been exceeded.
+    """
 
-    "ProviderHealthCheckError",
+    pass
 
-    "ProviderConfigurationError",
 
-    "ProviderValidationError",
+class ProviderUnsupportedOperationError(ProviderError):
+    """
+    Raised when a provider does not support the requested operation.
+    """
 
-    "ProviderUnsupportedOperationError",
-
-    "ProviderOperationError",
-
-    "ProviderConnectionError",
-
-    "ProviderNetworkError",
-
-    "ProviderTimeoutError",
-
-    "ProviderAuthenticationError",
-
-    "ProviderPermissionError",
-
-    "ProviderTransactionError",
-
-    "ProviderTransactionRejectedError",
-
-    "ProviderRateLimitError",
-
-]
+    pass
