@@ -72,6 +72,23 @@ SUPPORTED_NETWORKS = {
     "zksync-sepolia",
 }
 
+# Network mapping for Alchemy URLs
+ALCHEMY_NETWORK_MAP = {
+    "mainnet": "eth-mainnet",
+    "sepolia": "eth-sepolia",
+    "holesky": "eth-holesky",
+    "polygon-mainnet": "polygon-mainnet",
+    "polygon-amoy": "polygon-amoy",
+    "arbitrum-mainnet": "arb-mainnet",
+    "arbitrum-sepolia": "arb-sepolia",
+    "optimism-mainnet": "opt-mainnet",
+    "optimism-sepolia": "opt-sepolia",
+    "base-mainnet": "base-mainnet",
+    "base-sepolia": "base-sepolia",
+    "zksync-mainnet": "zksync-mainnet",
+    "zksync-sepolia": "zksync-sepolia",
+}
+
 
 ###############################################################################
 # Alchemy Provider
@@ -102,6 +119,9 @@ class AlchemyProvider(BaseProvider):
         else:
             self._api_key = api_key or os.getenv("ALCHEMY_API_KEY", "")
             self._network = network.lower()
+
+        # Get Alchemy network name for URL
+        self._alchemy_network = ALCHEMY_NETWORK_MAP.get(self._network, "eth-mainnet")
 
         self._http_url: Optional[str] = None
         self._ws_url: Optional[str] = None
@@ -136,7 +156,7 @@ class AlchemyProvider(BaseProvider):
     def http_url(self) -> str:
         if self._http_url is None:
             key = self._api_key if self._api_key else "demo"
-            self._http_url = f"https://{self._network}.g.alchemy.com/v2/{key}"
+            self._http_url = f"https://{self._alchemy_network}.g.alchemy.com/v2/{key}"
         return self._http_url
 
     @property
@@ -144,7 +164,7 @@ class AlchemyProvider(BaseProvider):
         if self._ws_url is None:
             if not self._api_key:
                 return ""
-            self._ws_url = f"wss://{self._network}.g.alchemy.com/v2/{self._api_key}"
+            self._ws_url = f"wss://{self._alchemy_network}.g.alchemy.com/v2/{self._api_key}"
         return self._ws_url
 
     ###########################################################################
@@ -194,6 +214,7 @@ class AlchemyProvider(BaseProvider):
             "provider": "Alchemy",
             "name": self.name,
             "network": self.network,
+            "alchemy_network": self._alchemy_network,
             "http_url": self.http_url,
             "ws_url": self.ws_url,
             "api_key": self.masked_api_key,

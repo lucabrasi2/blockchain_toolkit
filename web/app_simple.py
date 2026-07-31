@@ -35,6 +35,7 @@ from flask_bcrypt import Bcrypt
 from flask_mail import Mail
 from datetime import datetime
 from functools import wraps
+import sqlite3
 
 from controllers.ethereum_controller import EthereumController
 from controllers.bitcoin_controller import BitcoinController
@@ -753,7 +754,7 @@ if __name__ == '__main__':
     start_monitoring()
     
     # Run with SocketIO
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
 
 
 ###############################################################################
