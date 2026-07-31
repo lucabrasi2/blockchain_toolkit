@@ -28,7 +28,6 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import sqlite3
 from flask import Flask, render_template, request, jsonify, session, flash, redirect, url_for
 from flask_cors import CORS
 from flask_login import LoginManager, login_required, current_user
@@ -254,6 +253,33 @@ def ethereum_gas():
         return jsonify({"error": str(e)}), 400
 
 
+@app.route('/api/ethereum/node/validate', methods=['POST'])
+def validate_ethereum_node():
+    """Validate the current Ethereum node."""
+    try:
+        from ethereum.node_validator import validate_node
+        report = validate_node()
+        return jsonify(convert_to_serializable(report))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route('/api/ethereum/node/compare', methods=['POST'])
+def compare_ethereum_nodes():
+    """Compare multiple Ethereum nodes."""
+    try:
+        data = request.json
+        node_urls = data.get('node_urls', [])
+        if not node_urls:
+            return jsonify({"error": "Node URLs required"}), 400
+        
+        from ethereum.node_validator import compare_nodes
+        report = compare_nodes(node_urls)
+        return jsonify(convert_to_serializable(report))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 # ============ Bitcoin API Endpoints ============
 
 @app.route('/api/bitcoin/wallet', methods=['POST'])
@@ -303,6 +329,17 @@ def bitcoin_fee():
         from bitcoin.gas import get_fee_optimizer
         optimizer = get_fee_optimizer()
         return jsonify(convert_to_serializable(optimizer.get_fee_estimate()))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route('/api/bitcoin/node/validate', methods=['POST'])
+def validate_bitcoin_node():
+    """Validate Bitcoin network."""
+    try:
+        from bitcoin.node_validator import validate_node
+        report = validate_node()
+        return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -382,6 +419,19 @@ def tron_transaction():
             return jsonify({"error": "Transaction hash required"}), 400
         from tron.transactions import get_transaction
         report = get_transaction(tx_hash)
+        return jsonify(convert_to_serializable(report))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route('/api/tron/node/validate', methods=['POST'])
+def validate_tron_node():
+    """Validate TRON node."""
+    try:
+        data = request.json
+        rpc_url = data.get('rpc_url')
+        from tron.node_validator import validate_node
+        report = validate_node(rpc_url)
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400

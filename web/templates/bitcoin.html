@@ -137,6 +137,10 @@
         <a href="/ethereum">🟣 Ethereum</a>
         <a href="/bitcoin" class="active">🟠 Bitcoin</a>
         <a href="/tron">🔴 TRON</a>
+        <a href="/dashboard">📊 Dashboard</a>
+        <a href="/history">📜 History</a>
+        <a href="/auth/profile">👤 Profile</a>
+        <a href="/auth/logout">🚪 Logout</a>
     </div>
 
     <div class="container">
@@ -175,6 +179,13 @@
                 <h3>⛽ Fee Optimization</h3>
                 <button class="btn" onclick="getBtcFee()">Get Fee Estimates</button>
                 <div id="btc-fee-result" class="result">Ready</div>
+            </div>
+
+            <!-- Node Validation -->
+            <div class="card">
+                <h3>🖥️ Node Validation</h3>
+                <button class="btn" onclick="validateBtcNode()">Validate Bitcoin Network</button>
+                <div id="btc-node-result" class="result">Ready</div>
             </div>
         </div>
     </div>
@@ -235,6 +246,21 @@
                 displayResult('btc-fee-result', data);
             } catch (e) {
                 document.getElementById('btc-fee-result').textContent = `❌ Error: ${e.message}`;
+            }
+        }
+
+        async function validateBtcNode() {
+            document.getElementById('btc-node-result').textContent = '⏳ Loading...';
+            try {
+                const response = await fetch('/api/bitcoin/node/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                displayResult('btc-node-result', data);
+            } catch (e) {
+                document.getElementById('btc-node-result').textContent = `❌ Error: ${e.message}`;
             }
         }
     </script>

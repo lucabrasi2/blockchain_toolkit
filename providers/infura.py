@@ -8,21 +8,14 @@ providers.infura
 
 Purpose
 -------
-Enterprise Infura blockchain provider implementation.
-
-This module provides connectivity to Ethereum-compatible networks
-through Infura infrastructure.
-
-Architecture
-------------
-UBP Enterprise Connectivity Framework
+Enterprise implementation of the Infura blockchain provider.
 
 Author
 ------
 Jaramogi Diddy
 
-Platform
---------
+Project
+-------
 Universal Blockchain Platform (UBP)
 
 Version
@@ -33,488 +26,183 @@ Version
 
 from __future__ import annotations
 
-from typing import Any
+import os
+from typing import Any, Dict, Optional
 
-from core.logger import get_logger
-
-from providers.base import ProviderType
-from providers.web3_provider import Web3Provider
-
+from providers.base import BaseProvider, ProviderType
 from providers.config import ProviderConfig
+from providers.exceptions import ProviderConfigurationError
+from core.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-###############################################################################
-# Infura Provider
-###############################################################################
+SUPPORTED_NETWORKS = {
+    "mainnet",
+    "sepolia",
+    "holesky",
+    "polygon-mainnet",
+    "polygon-amoy",
+    "arbitrum-mainnet",
+    "arbitrum-sepolia",
+    "optimism-mainnet",
+    "optimism-sepolia",
+}
 
 
-class InfuraProvider(Web3Provider):
+class InfuraProvider(BaseProvider):
     """
     Enterprise Infura provider.
-
-    This provider supplies Ethereum-compatible blockchain
-    connectivity through Infura infrastructure.
-
-    Connection lifecycle, statistics, health monitoring,
-    retries and diagnostics are inherited from BaseProvider.
     """
-
-    ###########################################################################
-    # Construction
-    ###########################################################################
 
     def __init__(
         self,
-        config: ProviderConfig,
+        config: Optional[ProviderConfig] = None,
+        api_key: Optional[str] = None,
+        network: str = "mainnet",
     ) -> None:
-        """
-        Initialize the Infura provider.
-
-        Parameters
-        ----------
-        config : ProviderConfig
-            Validated provider configuration.
-        """
-
         super().__init__()
 
-        self._config = config
+        if config:
+            self._api_key = config.api_key or os.getenv("INFURA_API_KEY", "")
+            self._network = config.network or "mainnet"
+        else:
+            self._api_key = api_key or os.getenv("INFURA_API_KEY", "")
+            self._network = network.lower()
 
-        logger.info(
-            "Initialized InfuraProvider "
-            "(network=%s)",
-            self._config.network,
-        )
+        self._http_url: Optional[str] = None
+        self._ws_url: Optional[str] = None
 
-    ###########################################################################
-    # Provider Identity
-    ###########################################################################
+        self._validate_configuration()
 
     @property
     def name(self) -> str:
-        """
-        Provider name.
-        """
-        return "Infura"
+        return "infura"
 
     @property
     def blockchain(self) -> str:
-        """
-        Blockchain supported by the configured network.
-        """
-
-        network = self._config.network.lower()
-
-        if "polygon" in network:
-            return "Polygon"
-
-        if "arbitrum" in network or "arb" in network:
-            return "Arbitrum"
-
-        if "optimism" in network:
-            return "Optimism"
-
-        if "base" in network:
-            return "Base"
-
-        return "Ethereum"
+        return "ethereum"
 
     @property
     def network(self) -> str:
-        """
-        Network name.
-        """
-        return self._config.network
+        return self._network
 
     @property
     def provider_type(self) -> ProviderType:
-        """
-        Infrastructure classification.
-        """
         return ProviderType.CLOUD
-
-    ###########################################################################
-    # Endpoint Configuration
-    ###########################################################################
 
     @property
     def http_url(self) -> str:
-        """
-        Infura HTTP endpoint.
-        """
-
-        if self._config.endpoint:
-            return self._config.endpoint
-
-        return (
-            f"https://{self._config.network}"
-            f".infura.io/v3/"
-            f"{self._config.api_key}"
-        )
+        if self._http_url is None:
+            if not self._api_key:
+                raise ProviderConfigurationError("Infura API key is required.")
+            self._http_url = f"https://{self._network}.infura.io/v3/{self._api_key}"
+        return self._http_url
 
     @property
     def ws_url(self) -> str:
-        """
-        Infura WebSocket endpoint.
-        """
+        if self._ws_url is None:
+            if not self._api_key:
+                return ""
+            self._ws_url = f"wss://{self._network}.infura.io/ws/v3/{self._api_key}"
+        return self._ws_url
 
-        return (
-            f"wss://{self._config.network}"
-            f".infura.io/ws/v3/"
-            f"{self._config.api_key}"
-        )
-        ###########################################################################
-    # Provider Configuration
-    ###########################################################################
+    def _validate_configuration(self) -> None:
+        logger.debug("Validating Infura configuration.")
 
-    def get_config(self) -> dict[str, Any]:
-        """
-        Return provider configuration.
+        if self._network not in SUPPORTED_NETWORKS:
+            raise ProviderConfigurationError(
+                f"Unsupported Infura network: {self._network}"
+            )
 
-        Sensitive values such as API keys are never exposed.
-        """
+        if not self._api_key:
+            raise ProviderConfigurationError(
+                "Infura API key is required. Set INFURA_API_KEY in environment."
+            )
 
+    @property
+    def supports_websocket(self) -> bool:
+        return bool(self._api_key)
+
+    @property
+    def supports_archive(self) -> bool:
+        return False
+
+    @property
+    def supports_debug_api(self) -> bool:
+        return False
+
+    @property
+    def supports_trace_api(self) -> bool:
+        return False
+
+    def get_config(self) -> Dict[str, Any]:
         return {
-            "provider": self.name,
-            "blockchain": self.blockchain,
+            "provider": "Infura",
+            "name": self.name,
             "network": self.network,
-            "provider_type": self.provider_type.value,
-            "http_enabled": True,
-            "websocket_enabled": bool(self.ws_url),
-            "api_key_configured": bool(self._config.api_key),
-            "endpoint_override": bool(self._config.endpoint),
+            "http_url": self.http_url,
+            "ws_url": self.ws_url,
+            "api_key": self.masked_api_key,
+            "capabilities": {
+                "websocket": self.supports_websocket,
+                "archive": self.supports_archive,
+                "trace": self.supports_trace_api,
+                "debug": self.supports_debug_api,
+            },
         }
 
-    ###########################################################################
-    # Provider Information
-    ###########################################################################
+    @property
+    def masked_api_key(self) -> str:
+        if not self._api_key:
+            return ""
+        if len(self._api_key) <= 8:
+            return "********"
+        return self._api_key[:4] + "..." + self._api_key[-4:]
 
-    def get_provider_info(self) -> dict[str, Any]:
-        """
-        Return normalized provider information.
-        """
+    def is_available(self) -> bool:
+        try:
+            return self.health_check()
+        except Exception as error:
+            logger.warning(f"Infura provider unavailable: {error}")
+            return False
 
-        information = super().get_provider_info()
+    def validate(self) -> bool:
+        logger.info("Validating Infura provider.")
 
-        information.update(
-            {
-                "service": "Infura",
-                "api_key_configured": bool(self._config.api_key),
-                "endpoint_override": bool(self._config.endpoint),
-            }
+        try:
+            self._validate_configuration()
+
+            if not self.health_check():
+                return False
+
+            if self.chain_id is None:
+                logger.error("Unable to retrieve chain ID.")
+                return False
+
+            if self.latest_block is None:
+                logger.error("Unable to retrieve latest block.")
+                return False
+
+            logger.info("Infura provider validation successful.")
+            return True
+
+        except Exception as error:
+            logger.exception("Provider validation failed: %s", error)
+            return False
+
+    def __str__(self) -> str:
+        return f"Infura [{self._network}]"
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"network='{self._network}', "
+            f"status='{self.status.value}')"
         )
-
-        return information
-
-    ###########################################################################
-    # Endpoint Validation
-    ###########################################################################
-
-    def validate_endpoint(self) -> bool:
-        """
-        Validate the configured Infura endpoint.
-        """
-
-        logger.debug(
-            "Validating Infura endpoint for %s.",
-            self.network,
-        )
-
-        return self.health_check()
-
-    ###########################################################################
-    # Blockchain Queries
-    ###########################################################################
-
-    def get_block_number(self) -> int:
-        """
-        Return the latest block number.
-
-        Returns
-        -------
-        int
-            Latest blockchain height.
-        """
-
-        self.before_request()
-
-        try:
-            block_number = self.web3.eth.block_number
-
-            self.after_request(successful=True)
-
-            return block_number
-
-        except Exception:
-            self.after_request(successful=False)
-
-            logger.exception(
-                "Failed to retrieve latest block number."
-            )
-
-            raise
-
-    ###########################################################################
-    # Account Operations
-    ###########################################################################
-
-    def get_balance(
-        self,
-        address: str,
-    ) -> int:
-        """
-        Retrieve an account balance.
-
-        Parameters
-        ----------
-        address : str
-            Ethereum-compatible wallet address.
-
-        Returns
-        -------
-        int
-            Balance in Wei.
-        """
-
-        self.before_request()
-
-        try:
-            balance = self.web3.eth.get_balance(address)
-
-            self.after_request(successful=True)
-
-            return balance
-
-        except Exception:
-            self.after_request(successful=False)
-
-            logger.exception(
-                "Failed to retrieve balance for %s.",
-                address,
-            )
-
-            raise
-
-    def get_balance_eth(
-        self,
-        address: str,
-    ) -> float:
-        """
-        Retrieve an account balance in Ether.
-
-        Parameters
-        ----------
-        address : str
-            Ethereum-compatible wallet address.
-
-        Returns
-        -------
-        float
-            Balance in Ether.
-        """
-
-        balance = self.get_balance(address)
-
-        return float(
-            self.web3.from_wei(
-                balance,
-                "ether",
-            )
-        )
-        ###########################################################################
-    # Block Operations
-    ###########################################################################
-
-    def get_block(
-        self,
-        block_identifier: Any = "latest",
-    ) -> dict[str, Any]:
-        """
-        Retrieve block information.
-
-        Parameters
-        ----------
-        block_identifier : Any
-            Block number, block hash or "latest".
-
-        Returns
-        -------
-        dict[str, Any]
-            Block information.
-        """
-
-        self.before_request()
-
-        try:
-            block = self.web3.eth.get_block(
-                block_identifier
-            )
-
-            self.after_request(
-                successful=True
-            )
-
-            return dict(block)
-
-        except Exception:
-
-            self.after_request(
-                successful=False
-            )
-
-            logger.exception(
-                "Failed to retrieve block: %s",
-                block_identifier,
-            )
-
-            raise
-
-    ###########################################################################
-    # Transaction Operations
-    ###########################################################################
-
-    def get_transaction(
-        self,
-        transaction_hash: str,
-    ) -> dict[str, Any]:
-        """
-        Retrieve transaction information.
-
-        Parameters
-        ----------
-        transaction_hash : str
-            Transaction hash.
-
-        Returns
-        -------
-        dict[str, Any]
-            Transaction details.
-        """
-
-        self.before_request()
-
-        try:
-            transaction = self.web3.eth.get_transaction(
-                transaction_hash
-            )
-
-            self.after_request(
-                successful=True
-            )
-
-            return dict(transaction)
-
-        except Exception:
-
-            self.after_request(
-                successful=False
-            )
-
-            logger.exception(
-                "Failed to retrieve transaction: %s",
-                transaction_hash,
-            )
-
-            raise
-
-    def get_transaction_receipt(
-        self,
-        transaction_hash: str,
-    ) -> dict[str, Any]:
-        """
-        Retrieve transaction receipt.
-
-        Parameters
-        ----------
-        transaction_hash : str
-            Transaction hash.
-
-        Returns
-        -------
-        dict[str, Any]
-            Transaction receipt.
-        """
-
-        self.before_request()
-
-        try:
-            receipt = self.web3.eth.get_transaction_receipt(
-                transaction_hash
-            )
-
-            self.after_request(
-                successful=True
-            )
-
-            return dict(receipt)
-
-        except Exception:
-
-            self.after_request(
-                successful=False
-            )
-
-            logger.exception(
-                "Failed to retrieve receipt: %s",
-                transaction_hash,
-            )
-
-            raise
-
-    ###########################################################################
-    # Infura Features
-    ###########################################################################
-
-    def get_network_version(self) -> str:
-        """
-        Return the connected network version.
-
-        Returns
-        -------
-        str
-            Ethereum network version.
-        """
-
-        self.before_request()
-
-        try:
-            version = str(
-                self.web3.net.version
-            )
-
-            self.after_request(
-                successful=True
-            )
-
-            return version
-
-        except Exception:
-
-            self.after_request(
-                successful=False
-            )
-
-            logger.exception(
-                "Failed to retrieve network version."
-            )
-
-            raise
-
-    ###########################################################################
-    # Cleanup
-    ###########################################################################
 
     def close(self) -> None:
-        """
-        Release provider resources.
-        """
-
-        logger.info(
-            "Closing Infura provider."
-        )
-
+        logger.info("Closing Infura provider.")
         super().close()
 
 

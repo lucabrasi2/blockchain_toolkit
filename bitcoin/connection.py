@@ -12,7 +12,8 @@ Project: Universal Blockchain Platform (UBP)
 Version: 2.0.0
 """
 
-import requests
+
+from core.http_client import http_client
 from typing import Optional, Dict, Any
 
 from core.logger import get_logger
@@ -32,7 +33,7 @@ class BitcoinClient:
     def get_latest_block(self) -> Dict[str, Any]:
         """Get the latest block."""
         try:
-            response = requests.get(f"{self.base_url}/latestblock", timeout=10)
+            response = http_client.get(f"{self.base_url}/latestblock", timeout=10)
             data = response.json()
             
             if data.get("hash"):
@@ -48,7 +49,7 @@ class BitcoinClient:
         """Get block by height or hash."""
         try:
             if isinstance(block_identifier, int) or (isinstance(block_identifier, str) and block_identifier.isdigit()):
-                response = requests.get(f"{self.base_url}/block-height/{block_identifier}?format=json", timeout=10)
+                response = http_client.get(f"{self.base_url}/block-height/{block_identifier}?format=json", timeout=10)
                 data = response.json()
                 if data.get("blocks") and len(data["blocks"]) > 0:
                     block_hash = data["blocks"][0].get("hash")
@@ -57,7 +58,7 @@ class BitcoinClient:
             else:
                 block_hash = block_identifier
             
-            response = requests.get(f"{self.base_url}/rawblock/{block_hash}", timeout=10)
+            response = http_client.get(f"{self.base_url}/rawblock/{block_hash}", timeout=10)
             block = response.json()
             
             return {
@@ -84,7 +85,7 @@ class BitcoinClient:
     def get_address(self, address: str) -> Dict[str, Any]:
         """Get address information."""
         try:
-            response = requests.get(f"{self.base_url}/rawaddr/{address}", timeout=10)
+            response = http_client.get(f"{self.base_url}/rawaddr/{address}", timeout=10)
             data = response.json()
             
             if "error" in data:
@@ -106,7 +107,7 @@ class BitcoinClient:
     def get_transaction(self, tx_hash: str) -> Dict[str, Any]:
         """Get transaction by hash."""
         try:
-            response = requests.get(f"{self.base_url}/rawtx/{tx_hash}", timeout=10)
+            response = http_client.get(f"{self.base_url}/rawtx/{tx_hash}", timeout=10)
             data = response.json()
             
             if "error" in data:

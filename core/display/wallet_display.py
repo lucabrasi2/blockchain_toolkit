@@ -31,7 +31,6 @@ class WalletDisplay:
     """
     Wallet report display formatter for all blockchains.
     """
-
     @staticmethod
     def display_wallet_report(report: Dict[str, Any]) -> None:
         """
@@ -42,84 +41,160 @@ class WalletDisplay:
         report : dict
             Wallet inspection report.
         """
-        # Determine blockchain type from report
-        blockchain = report.get("blockchain", "Unknown")
-        classification = report.get("classification", "Unknown")
-        
-        # Set appropriate header emoji
-        if "Bitcoin" in classification or "BTC" in str(report.get("balance_btc", "")):
+
+        # ==========================================================
+        # Handle invalid wallet reports
+        # ==========================================================
+        if "error" in report or not report.get("is_valid", True):
+            print_header("❌ INVALID WALLET", "=", 60)
+
+            print_section("Error", "-", 40)
+            print(f"  Address:          {report.get('address', 'Unknown')}")
+            print(f"  Reason:           {report.get('error', 'Wallet validation failed')}")
+
+            print()
+            return
+
+        # ==========================================================
+        # Determine blockchain type
+        # ==========================================================
+        if "balance_btc" in report:
+            blockchain = "bitcoin"
             header = "🟠 BITCOIN WALLET REPORT"
-        elif "TRON" in classification or "TRX" in str(report.get("balance_trx", "")):
+
+        elif "balance_trx" in report:
+            blockchain = "tron"
             header = "🔴 TRON WALLET REPORT"
+
+        elif "balance_eth" in report:
+            blockchain = "ethereum"
+            header = "🟣 ETHEREUM WALLET REPORT"
+
         else:
+            blockchain = "unknown"
             header = "👛 WALLET REPORT"
-        
+
         print_header(header, "=", 60)
 
+        # ==========================================================
         # Basic Information
+        # ==========================================================
         print_section("📌 Basic Information", "-", 40)
+
         print(f"  Address:          {format_address(report.get('address', 'N/A'))}")
         print(f"  Full Address:     {report.get('address', 'N/A')}")
-        
-        # Show contract status if available
+
         if "is_contract" in report:
-            print(f"  Is Contract:      {'✅ Yes' if report.get('is_contract') else '❌ No'}")
-        
-        print(f"  Classification:   {classification}")
+            print(
+                f"  Is Contract:      {'✅ Yes' if report.get('is_contract') else '❌ No'}"
+            )
+
+        print(f"  Classification:   {report.get('classification', 'Unknown')}")
         print()
 
-        # Balance Information (blockchain-specific)
+        # ==========================================================
+        # Balance Information
+        # ==========================================================
         print_section("💰 Balance Information", "-", 40)
-        
-        # Check for Bitcoin
-        if "balance_btc" in report:
-            print(f"  Balance (BTC):    {format_balance(report.get('balance_btc', 0))} BTC")
-            print(f"  Balance (Sats):   {report.get('balance_satoshis', 0):,} SATS")
-        
-        # Check for TRON
-        elif "balance_trx" in report:
-            print(f"  Balance (TRX):    {format_balance(report.get('balance_trx', 0))} TRX")
-            print(f"  Balance (SUN):    {report.get('balance_sun', 0):,} SUN")
-        
-        # Default to Ethereum
+
+        if blockchain == "bitcoin":
+
+            print(
+                f"  Balance (BTC):    {format_balance(report.get('balance_btc', 0))} BTC"
+            )
+            print(
+                f"  Balance (Sats):   {report.get('balance_satoshis', 0):,} SATS"
+            )
+
+        elif blockchain == "tron":
+
+            print(
+                f"  Balance (TRX):    {format_balance(report.get('balance_trx', 0))} TRX"
+            )
+            print(
+                f"  Balance (SUN):    {report.get('balance_sun', 0):,} SUN"
+            )
+
         else:
-            print(f"  Balance (ETH):    {format_balance(report.get('balance_eth', 0))} ETH")
-            print(f"  Balance (WEI):    {format_wei(report.get('balance_wei', 0))} WEI")
-        
+
+            print(
+                f"  Balance (ETH):    {format_balance(report.get('balance_eth', 0))} ETH"
+            )
+            print(
+                f"  Balance (WEI):    {format_wei(report.get('balance_wei', 0))} WEI"
+            )
+
         print()
 
-        # Network Information (blockchain-specific)
+        # ==========================================================
+        # Network Information
+        # ==========================================================
         print_section("🔗 Network Information", "-", 40)
-        
-        # Check for Bitcoin
-        if "balance_btc" in report:
-            print(f"  Tx Count:         {report.get('transaction_count', 0)}")
-        
-        # Check for TRON
-        elif "balance_trx" in report:
-            print(f"  Energy:           {report.get('energy', 0)}")
-            print(f"  Bandwidth:        {report.get('bandwidth', 0)}")
-        
-        # Default to Ethereum
+
+        if blockchain == "bitcoin":
+
+            print(
+                f"  Tx Count:         {report.get('transaction_count', 0)}"
+            )
+
+            print(
+                f"  Total Received:   {report.get('total_received', 0)} BTC"
+            )
+
+            print(
+                f"  Total Sent:       {report.get('total_sent', 0)} BTC"
+            )
+
+            print(
+                f"  Witness:          {'✅ Yes' if report.get('is_witness') else '❌ No'}"
+            )
+
+            print(
+                f"  Script Type:      {report.get('script_type', 'Unknown')}"
+            )
+
+        elif blockchain == "tron":
+
+            print(
+                f"  Energy:           {report.get('energy', 0)}"
+            )
+
+            print(
+                f"  Bandwidth:        {report.get('bandwidth', 0)}"
+            )
+
         else:
-            print(f"  Nonce:            {report.get('nonce', 0)}")
-            print(f"  Tx Count:         {report.get('transaction_count', 0)}")
-        
+
+            print(
+                f"  Nonce:            {report.get('nonce', 0)}"
+            )
+
+            print(
+                f"  Tx Count:         {report.get('transaction_count', 0)}"
+            )
+
         print()
 
+        # ==========================================================
         # Token Balances
-        token_balances = report.get('token_balances', [])
+        # ==========================================================
+        token_balances = report.get("token_balances", [])
+
         if token_balances:
+
             print_section("🪙 Token Balances", "-", 40)
+
             for token in token_balances:
                 print(f"  • {token}")
+
             print()
+
         else:
+
             print_info("No token balances found.")
             print()
 
         print_success("Wallet inspection completed successfully!")
-
     @staticmethod
     def display_wallet_summary(report: Dict[str, Any]) -> None:
         """

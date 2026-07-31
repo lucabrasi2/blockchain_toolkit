@@ -9,10 +9,10 @@ Purpose:
     between the user interface and TRON services.
 
 Responsibilities:
-    • Validate TRON input
     • Coordinate TRON services
-    • Handle exceptions
-    • Call display modules
+    • Delegate business logic
+    • Handle controller-level exceptions
+    • Provide a stable interface for API, CLI and Web UI
 
 Author: Jaramogi Diddy
 Project: Universal Blockchain Platform (UBP)
@@ -22,7 +22,14 @@ Version: 2.0.0
 from typing import Dict, Any, Optional
 
 from core.logger import get_logger
-from core.display import print_error, print_info
+from core.display import print_error
+
+from services.tron.wallet_service import TronWalletService
+from services.tron.contract_service import TronContractService
+from services.tron.token_service import TronTokenService
+
+from tron.blocks import get_block
+from tron.transactions import get_transaction
 
 
 logger = get_logger(__name__)
@@ -30,20 +37,28 @@ logger = get_logger(__name__)
 
 class TronController:
     """
-    TRON Controller for handling
-    TRON blockchain interactions.
+    Controller responsible for coordinating
+    TRON blockchain operations.
+
+    The controller intentionally contains very
+    little business logic. All blockchain-specific
+    operations are delegated to the appropriate
+    service classes.
     """
 
     def __init__(self):
-        """Initialize the TRON Controller."""
-        # self.wallet_service = TronWalletService()
-        # self.contract_service = TronContractService()
-        logger.info("TronController initialized (placeholder).")
-        print_info("TRON module is under development.")
+        """
+        Initialize TRON services.
+        """
+        self.wallet_service = TronWalletService()
+        self.contract_service = TronContractService()
+        self.token_service = TronTokenService()
+
+        logger.info("TronController initialized successfully.")
 
     def wallet_inspector(self, address: str) -> Dict[str, Any]:
         """
-        Inspect a TRON wallet address.
+        Inspect a TRON wallet.
 
         Parameters
         ----------
@@ -57,20 +72,24 @@ class TronController:
         """
         logger.info(f"Inspecting TRON wallet: {address}")
 
-        # Placeholder implementation
-        return {
-            "address": address,
-            "balance_trx": 0.0,
-            "balance_energy": 0,
-            "transaction_count": 0,
-            "is_contract": False,
-            "classification": "TRON Address",
-            "message": "TRON module coming soon!",
-        }
+        try:
+            return self.wallet_service.get_wallet_report(address)
+
+        except Exception as error:
+            logger.exception(
+                "Unexpected error while inspecting TRON wallet."
+            )
+
+            print_error(str(error))
+
+            return {
+                "address": address,
+                "error": str(error),
+            }
 
     def contract_inspector(self, address: str) -> Dict[str, Any]:
         """
-        Inspect a TRON contract address.
+        Inspect a TRON contract.
 
         Parameters
         ----------
@@ -84,22 +103,35 @@ class TronController:
         """
         logger.info(f"Inspecting TRON contract: {address}")
 
-        # Placeholder implementation
-        return {
-            "address": address,
-            "is_contract": True,
-            "classification": "TRON Contract",
-            "message": "TRON module coming soon!",
-        }
+        try:
+            return self.contract_service.get_contract_report(address)
 
-    def token_inspector(self, address: str) -> Dict[str, Any]:
+        except Exception as error:
+            logger.exception(
+                "Unexpected error while inspecting TRON contract."
+            )
+
+            print_error(str(error))
+
+            return {
+                "address": address,
+                "error": str(error),
+            }
+
+    def token_inspector(
+        self,
+        address: str,
+        wallet_address: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Inspect a TRON token address.
+        Inspect a TRC-20 token.
 
         Parameters
         ----------
         address : str
-            TRON token address.
+            Token contract address.
+        wallet_address : str, optional
+            Wallet address for balance lookup.
 
         Returns
         -------
@@ -108,14 +140,23 @@ class TronController:
         """
         logger.info(f"Inspecting TRON token: {address}")
 
-        # Placeholder implementation
-        return {
-            "address": address,
-            "name": "TRON Token",
-            "symbol": "TRX",
-            "decimals": 6,
-            "message": "TRON module coming soon!",
-        }
+        try:
+            return self.token_service.get_token_report(
+                address=address,
+                wallet_address=wallet_address,
+            )
+
+        except Exception as error:
+            logger.exception(
+                "Unexpected error while inspecting TRON token."
+            )
+
+            print_error(str(error))
+
+            return {
+                "address": address,
+                "error": str(error),
+            }
 
     def block_explorer(self, block_number: int) -> Dict[str, Any]:
         """
@@ -129,18 +170,24 @@ class TronController:
         Returns
         -------
         Dict[str, Any]
-            Block exploration report.
+            Block information.
         """
         logger.info(f"Exploring TRON block: {block_number}")
 
-        # Placeholder implementation
-        return {
-            "number": block_number,
-            "hash": "N/A",
-            "timestamp": "N/A",
-            "transaction_count": 0,
-            "message": "TRON module coming soon!",
-        }
+        try:
+            return get_block(block_number)
+
+        except Exception as error:
+            logger.exception(
+                "Unexpected error while exploring TRON block."
+            )
+
+            print_error(str(error))
+
+            return {
+                "number": block_number,
+                "error": str(error),
+            }
 
     def transaction_analyzer(self, tx_hash: str) -> Dict[str, Any]:
         """
@@ -149,7 +196,7 @@ class TronController:
         Parameters
         ----------
         tx_hash : str
-            TRON transaction hash.
+            Transaction hash.
 
         Returns
         -------
@@ -158,12 +205,17 @@ class TronController:
         """
         logger.info(f"Analyzing TRON transaction: {tx_hash}")
 
-        # Placeholder implementation
-        return {
-            "hash": tx_hash,
-            "from": "N/A",
-            "to": "N/A",
-            "value": 0.0,
-            "status": False,
-            "message": "TRON module coming soon!",
-        }
+        try:
+            return get_transaction(tx_hash)
+
+        except Exception as error:
+            logger.exception(
+                "Unexpected error while analyzing TRON transaction."
+            )
+
+            print_error(str(error))
+
+            return {
+                "hash": tx_hash,
+                "error": str(error),
+            }  

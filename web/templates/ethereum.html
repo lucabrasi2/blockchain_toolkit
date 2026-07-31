@@ -143,6 +143,10 @@
         <a href="/ethereum" class="active">🟣 Ethereum</a>
         <a href="/bitcoin">🟠 Bitcoin</a>
         <a href="/tron">🔴 TRON</a>
+        <a href="/dashboard">📊 Dashboard</a>
+        <a href="/history">📜 History</a>
+        <a href="/auth/profile">👤 Profile</a>
+        <a href="/auth/logout">🚪 Logout</a>
     </div>
 
     <div class="container">
@@ -190,6 +194,13 @@
                 <input type="text" id="eth-tx" placeholder="Enter transaction hash">
                 <button class="btn" onclick="analyzeEthTx()">Analyze Transaction</button>
                 <div id="eth-tx-result" class="result">Ready</div>
+            </div>
+
+            <!-- Node Validation -->
+            <div class="card">
+                <h3>🖥️ Node Validation</h3>
+                <button class="btn" onclick="validateNode()">Validate Current Node</button>
+                <div id="eth-node-result" class="result">Ready</div>
             </div>
 
             <!-- Gas -->
@@ -261,6 +272,21 @@
             document.getElementById('eth-tx-result').textContent = '⏳ Loading...';
             const data = await fetchAPI('/api/ethereum/transaction', { tx_hash });
             displayResult('eth-tx-result', data);
+        }
+
+        async function validateNode() {
+            document.getElementById('eth-node-result').textContent = '⏳ Loading...';
+            try {
+                const response = await fetch('/api/ethereum/node/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                displayResult('eth-node-result', data);
+            } catch (e) {
+                document.getElementById('eth-node-result').textContent = `❌ Error: ${e.message}`;
+            }
         }
 
         async function getEthGas() {

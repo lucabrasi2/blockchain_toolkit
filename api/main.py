@@ -19,6 +19,7 @@ from typing import Optional, List, Any
 from datetime import datetime
 import logging
 import json
+from sqlalchemy import text
 
 from api.models import (
     AddressRequest,
@@ -38,13 +39,18 @@ from api.models import (
 from controllers.ethereum_controller import EthereumController
 from controllers.bitcoin_controller import BitcoinController
 from controllers.tron_controller import TronController
-from database.database import get_db_connection
+from database.database import get_db_manager
 from database.models import WalletInspection, ContractInspection, TransactionHistory
 from ethereum.gas import get_gas_optimizer
 from core.websocket.manager import get_connection_manager, WebSocketMessage
 from core.websocket.events import get_event_emitter
 
 logger = logging.getLogger(__name__)
+
+def get_db_connection():
+    """Get a raw database connection."""
+    db_manager = get_db_manager()
+    return db_manager.engine.connect()
 
 # Create FastAPI app
 app = FastAPI(
@@ -102,13 +108,16 @@ async def root():
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint."""
+    # Check database connectivity
     try:
-        db = get_db_connection()
-        db.execute("SELECT 1")
+        db_manager = get_db_manager()
+        with db_manager.get_session() as session:
+            session.execute("SELECT 1")
         db_status = "healthy"
     except Exception:
         db_status = "unhealthy"
 
+    # Check Ethereum node / RPC connectivity
     try:
         w3 = eth_controller.connection
         if w3.is_connected():
@@ -122,7 +131,7 @@ async def health_check():
         chain_id = None
 
     return HealthResponse(
-        status="healthy" if db_status == "healthy" and rpc_status == "healthy" else "degraded",
+        status=("healthy" if db_status == "healthy" and rpc_status == "healthy" else "degraded"),
         timestamp=datetime.utcnow().isoformat(),
         database=db_status,
         blockchain="Ethereum",

@@ -54,9 +54,13 @@ class TransactionDisplay:
         report : dict
             Transaction analysis report.
         """
+        if report is None:
+           print_error("Transaction report is empty.")
+           return
+
         if report.get("error"):
-            print_error(f"Error fetching transaction: {report.get('error')}")
-            return
+          print_error(f"Error fetching transaction: {report.get('error')}")
+          return
 
         # Detect blockchain type
         # Bitcoin has confirmations, Ethereum has gas_used

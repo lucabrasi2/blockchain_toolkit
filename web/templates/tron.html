@@ -137,6 +137,10 @@
         <a href="/ethereum">🟣 Ethereum</a>
         <a href="/bitcoin">🟠 Bitcoin</a>
         <a href="/tron" class="active">🔴 TRON</a>
+        <a href="/dashboard">📊 Dashboard</a>
+        <a href="/history">📜 History</a>
+        <a href="/auth/profile">👤 Profile</a>
+        <a href="/auth/logout">🚪 Logout</a>
     </div>
 
     <div class="container">
@@ -184,6 +188,13 @@
                 <input type="text" id="tron-tx" placeholder="Enter transaction hash">
                 <button class="btn" onclick="analyzeTronTx()">Analyze Transaction</button>
                 <div id="tron-tx-result" class="result">Ready</div>
+            </div>
+
+            <!-- Node Validation -->
+            <div class="card">
+                <h3>🖥️ Node Validation</h3>
+                <button class="btn" onclick="validateTronNode()">Validate TRON Network</button>
+                <div id="tron-node-result" class="result">Ready</div>
             </div>
         </div>
     </div>
@@ -248,6 +259,21 @@
             document.getElementById('tron-tx-result').textContent = '⏳ Loading...';
             const data = await fetchAPI('/api/tron/transaction', { tx_hash });
             displayResult('tron-tx-result', data);
+        }
+
+        async function validateTronNode() {
+            document.getElementById('tron-node-result').textContent = '⏳ Loading...';
+            try {
+                const response = await fetch('/api/tron/node/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                displayResult('tron-node-result', data);
+            } catch (e) {
+                document.getElementById('tron-node-result').textContent = `❌ Error: ${e.message}`;
+            }
         }
     </script>
 </body>

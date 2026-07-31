@@ -1,42 +1,112 @@
+"""
+===============================================================================
+Universal Blockchain Platform (UBP)
+
+Module
+------
+providers.alchemy
+
+Purpose
+-------
+Enterprise implementation of the Alchemy blockchain provider.
+
+Responsibilities
+----------------
+• Build Alchemy RPC endpoints
+• Validate configuration
+• Expose provider metadata
+• Provide Web3 connectivity
+• Report provider capabilities
+• Integrate with ProviderManager
+
+This module intentionally contains NO blockchain business logic.
+
+Business logic belongs in:
+
+    services/
+
+Author
+------
+Jaramogi Diddy
+
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
+"""
+
 from __future__ import annotations
 
-from typing import Any
+import os
+from typing import Any, Dict, Optional
 
-from core.logger import get_logger
-from providers.web3_provider import Web3Provider
+from providers.base import BaseProvider, ProviderType
 from providers.config import ProviderConfig
-from providers.provider_type import ProviderType
+from providers.exceptions import ProviderConfigurationError
+from core.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class AlchemyProvider(Web3Provider):
+###############################################################################
+# Supported Networks
+###############################################################################
+
+SUPPORTED_NETWORKS = {
+    "mainnet",
+    "sepolia",
+    "holesky",
+    "polygon-mainnet",
+    "polygon-amoy",
+    "arbitrum-mainnet",
+    "arbitrum-sepolia",
+    "optimism-mainnet",
+    "optimism-sepolia",
+    "base-mainnet",
+    "base-sepolia",
+    "zksync-mainnet",
+    "zksync-sepolia",
+}
+
+
+###############################################################################
+# Alchemy Provider
+###############################################################################
+
+
+class AlchemyProvider(BaseProvider):
     """
-    Enterprise Alchemy provider implementation.
-
-    This provider supplies Ethereum-compatible blockchain connectivity
-    through Alchemy infrastructure while delegating connection lifecycle,
-    health monitoring, statistics, and diagnostics to BaseProvider.
+    Enterprise Alchemy provider.
     """
 
-    def __init__(self, config: ProviderConfig) -> None:
-        """
-        Initialize the Alchemy provider.
+    ###########################################################################
+    # Construction
+    ###########################################################################
 
-        Parameters
-        ----------
-        config : ProviderConfig
-            Validated provider configuration.
-        """
+    def __init__(
+        self,
+        config: Optional[ProviderConfig] = None,
+        api_key: Optional[str] = None,
+        network: str = "mainnet",
+    ) -> None:
         super().__init__()
 
-        self._config = config
+        # If config is provided, use it
+        if config:
+            self._api_key = config.api_key or os.getenv("ALCHEMY_API_KEY", "")
+            self._network = config.network or "mainnet"
+        else:
+            self._api_key = api_key or os.getenv("ALCHEMY_API_KEY", "")
+            self._network = network.lower()
 
-        logger.info(
-            "Initialized AlchemyProvider "
-            "(network=%s)",
-            self._config.network,
-        )
+        self._http_url: Optional[str] = None
+        self._ws_url: Optional[str] = None
+
+        self._validate_configuration()
 
     ###########################################################################
     # Provider Identity
@@ -44,392 +114,202 @@ class AlchemyProvider(Web3Provider):
 
     @property
     def name(self) -> str:
-        return "Alchemy"
+        return "alchemy"
 
     @property
     def blockchain(self) -> str:
-        """
-        Determine the blockchain from the configured network.
-        """
-        network = self._config.network.lower()
-
-        if "polygon" in network:
-            return "Polygon"
-
-        if "arb" in network or "arbitrum" in network:
-            return "Arbitrum"
-
-        if "optimism" in network or "opt" in network:
-            return "Optimism"
-
-        if "base" in network:
-            return "Base"
-
-        return "Ethereum"
+        return "ethereum"
 
     @property
     def network(self) -> str:
-        return self._config.network
+        return self._network
 
     @property
     def provider_type(self) -> ProviderType:
         return ProviderType.CLOUD
 
     ###########################################################################
-    # Endpoint Configuration
+    # Endpoint Construction
     ###########################################################################
 
     @property
     def http_url(self) -> str:
-        """
-        Return the HTTP RPC endpoint.
-        """
-
-        if self._config.endpoint:
-            return self._config.endpoint
-
-        return (
-            f"https://{self._config.network}"
-            f".g.alchemy.com/v2/"
-            f"{self._config.api_key}"
-        )
+        if self._http_url is None:
+            key = self._api_key if self._api_key else "demo"
+            self._http_url = f"https://{self._network}.g.alchemy.com/v2/{key}"
+        return self._http_url
 
     @property
     def ws_url(self) -> str:
-        """
-        Return the WebSocket RPC endpoint.
-        """
+        if self._ws_url is None:
+            if not self._api_key:
+                return ""
+            self._ws_url = f"wss://{self._network}.g.alchemy.com/v2/{self._api_key}"
+        return self._ws_url
 
-        return (
-            f"wss://{self._config.network}"
-            f".g.alchemy.com/v2/"
-            f"{self._config.api_key}"
-        )
-        ###########################################################################
+    ###########################################################################
+    # Configuration Validation
+    ###########################################################################
+
+    def _validate_configuration(self) -> None:
+        """Validate provider configuration."""
+        logger.debug("Validating Alchemy configuration.")
+
+        if self._network not in SUPPORTED_NETWORKS:
+            raise ProviderConfigurationError(
+                f"Unsupported Alchemy network: {self._network}"
+            )
+
+    ###########################################################################
+    # Provider Capabilities
+    ###########################################################################
+
+    @property
+    def supports_websocket(self) -> bool:
+        """Whether WebSocket connectivity is available."""
+        return bool(self._api_key)
+
+    @property
+    def supports_archive(self) -> bool:
+        """Whether archive data is supported."""
+        return True
+
+    @property
+    def supports_debug_api(self) -> bool:
+        """Whether debug namespace may be available."""
+        return True
+
+    @property
+    def supports_trace_api(self) -> bool:
+        """Whether trace namespace may be available."""
+        return True
+
+    ###########################################################################
     # Provider Configuration
     ###########################################################################
 
-    def get_config(self) -> dict[str, Any]:
-        """
-        Return provider configuration.
-
-        Sensitive information such as API keys is never exposed.
-        """
-
+    def get_config(self) -> Dict[str, Any]:
+        """Return normalized provider configuration."""
         return {
-            "provider": self.name,
-            "blockchain": self.blockchain,
+            "provider": "Alchemy",
+            "name": self.name,
             "network": self.network,
-            "provider_type": self.provider_type.value,
-            "http_enabled": True,
-            "websocket_enabled": bool(self.ws_url),
-            "api_key_configured": bool(self._config.api_key),
-            "endpoint_override": bool(self._config.endpoint),
+            "http_url": self.http_url,
+            "ws_url": self.ws_url,
+            "api_key": self.masked_api_key,
+            "capabilities": {
+                "websocket": self.supports_websocket,
+                "archive": self.supports_archive,
+                "trace": self.supports_trace_api,
+                "debug": self.supports_debug_api,
+            },
         }
 
     ###########################################################################
-    # Provider Information
+    # Metadata
     ###########################################################################
 
-    def get_provider_info(self) -> dict[str, Any]:
-        """
-        Return normalized provider information.
-        """
-
-        information = super().get_provider_info()
-
-        information.update(
-            {
-                "service": "Alchemy",
-                "api_key_configured": bool(self._config.api_key),
-                "endpoint_override": bool(self._config.endpoint),
-            }
-        )
-
-        return information
+    @property
+    def masked_api_key(self) -> str:
+        """Secure API key representation."""
+        if not self._api_key:
+            return ""
+        if len(self._api_key) <= 8:
+            return "********"
+        return self._api_key[:4] + "..." + self._api_key[-4:]
 
     ###########################################################################
-    # Endpoint Validation
+    # Diagnostics
     ###########################################################################
 
-    def validate_endpoint(self) -> bool:
-        """
-        Validate the configured Alchemy endpoint.
-        """
-
-        logger.debug(
-            "Validating Alchemy endpoint for %s.",
-            self.network,
-        )
-
-        return self.health_check()
-
-    ###########################################################################
-    # Blockchain Queries
-    ###########################################################################
-
-    def get_block_number(self) -> int:
-        """
-        Return the latest block number.
-        """
-
-        self.before_request()
-
+    def is_available(self) -> bool:
+        """Determine whether the provider is available."""
         try:
-            block_number = self.web3.eth.block_number
+            return self.health_check()
+        except Exception as error:
+            logger.warning(f"Alchemy provider unavailable: {error}")
+            return False
 
-            self.after_request(successful=True)
-
-            return block_number
-
-        except Exception:
-            self.after_request(successful=False)
-            logger.exception(
-                "Failed to retrieve latest block number."
-            )
-            raise
-
-    ###########################################################################
-    # Account Operations
-    ###########################################################################
-
-    def get_balance(self, address: str) -> int:
-        """
-        Retrieve an account balance.
-
-        Parameters
-        ----------
-        address : str
-            Ethereum-compatible wallet address.
-
-        Returns
-        -------
-        int
-            Balance in Wei.
-        """
-
-        self.before_request()
-
-        try:
-            balance = self.web3.eth.get_balance(address)
-
-            self.after_request(successful=True)
-
-            return balance
-
-        except Exception:
-            self.after_request(successful=False)
-            logger.exception(
-                "Failed to retrieve balance for %s.",
-                address,
-            )
-            raise
-
-    def get_balance_eth(self, address: str) -> float:
-        """
-        Retrieve an account balance in Ether.
-
-        Parameters
-        ----------
-        address : str
-            Ethereum-compatible wallet address.
-
-        Returns
-        -------
-        float
-            Balance in Ether.
-        """
-
-        balance = self.get_balance(address)
-
-        return float(
-            self.web3.from_wei(
-                balance,
-                "ether",
-            )
-        )
-        ###########################################################################
-    # Block Operations
-    ###########################################################################
-
-    def get_block(
-        self,
-        block_identifier: Any = "latest",
-    ) -> dict[str, Any]:
-        """
-        Retrieve block information.
-
-        Parameters
-        ----------
-        block_identifier : Any
-            Block number, block hash, or "latest".
-
-        Returns
-        -------
-        dict[str, Any]
-            Block information.
-        """
-
-        self.before_request()
-
-        try:
-            block = self.web3.eth.get_block(
-                block_identifier
-            )
-
-            self.after_request(
-                successful=True
-            )
-
-            return dict(block)
-
-        except Exception:
-            self.after_request(
-                successful=False
-            )
-
-            logger.exception(
-                "Failed to retrieve block: %s",
-                block_identifier,
-            )
-
-            raise
-
-    ###########################################################################
-    # Transaction Operations
-    ###########################################################################
-
-    def get_transaction(
-        self,
-        transaction_hash: str,
-    ) -> dict[str, Any]:
-        """
-        Retrieve transaction information.
-
-        Parameters
-        ----------
-        transaction_hash : str
-            Transaction hash.
-
-        Returns
-        -------
-        dict[str, Any]
-            Transaction details.
-        """
-
-        self.before_request()
-
-        try:
-            transaction = (
-                self.web3.eth.get_transaction(
-                    transaction_hash
-                )
-            )
-
-            self.after_request(
-                successful=True
-            )
-
-            return dict(transaction)
-
-        except Exception:
-            self.after_request(
-                successful=False
-            )
-
-            logger.exception(
-                "Failed to retrieve transaction: %s",
-                transaction_hash,
-            )
-
-            raise
-
-    def get_transaction_receipt(
-        self,
-        transaction_hash: str,
-    ) -> dict[str, Any]:
-        """
-        Retrieve transaction receipt.
-
-        Parameters
-        ----------
-        transaction_hash : str
-            Transaction hash.
-
-        Returns
-        -------
-        dict[str, Any]
-            Receipt information.
-        """
-
-        self.before_request()
-
-        try:
-            receipt = (
-                self.web3.eth.get_transaction_receipt(
-                    transaction_hash
-                )
-            )
-
-            self.after_request(
-                successful=True
-            )
-
-            return dict(receipt)
-
-        except Exception:
-            self.after_request(
-                successful=False
-            )
-
-            logger.exception(
-                "Failed to retrieve receipt: %s",
-                transaction_hash,
-            )
-
-            raise
-
-    ###########################################################################
-    # Alchemy Features
-    ###########################################################################
-
-    def get_token_balances(
-        self,
-        address: str,
-    ) -> dict[str, Any]:
-        """
-        Placeholder for Alchemy Token API support.
-
-        Future support:
-        - alchemy_getTokenBalances
-        - ERC20 discovery
-        - NFT discovery
-        """
-
-        logger.info(
-            "Token balance request for %s",
-            address,
-        )
-
+    def diagnostics(self) -> Dict[str, Any]:
+        """Return enterprise diagnostics."""
         return {
-            "address": address,
-            "tokens": [],
-            "status": "not_enabled",
+            "provider": "Alchemy",
+            "network": self.network,
+            "status": self.status.value,
+            "chain_id": self.chain_id,
+            "latest_block": self.latest_block,
+            "client_version": self.client_version,
+            "latency_ms": self.statistics.last_latency_ms,
+            "average_latency_ms": self.statistics.average_latency,
+            "successful_connections": self.statistics.successful_connections,
+            "failed_connections": self.statistics.failed_connections,
+            "requests": self.statistics.requests,
+            "failed_requests": self.statistics.failed_requests,
         }
+
+    ###########################################################################
+    # Enterprise Validation
+    ###########################################################################
+
+    def validate(self) -> bool:
+        """Perform a comprehensive provider validation."""
+        logger.info("Validating Alchemy provider.")
+
+        try:
+            self._validate_configuration()
+
+            if not self.health_check():
+                return False
+
+            if self.chain_id is None:
+                logger.error("Unable to retrieve chain ID.")
+                return False
+
+            if self.latest_block is None:
+                logger.error("Unable to retrieve latest block.")
+                return False
+
+            logger.info("Alchemy provider validation successful.")
+            return True
+
+        except Exception as error:
+            logger.exception("Provider validation failed: %s", error)
+            return False
+
+    ###########################################################################
+    # Object Protocol
+    ###########################################################################
+
+    def __str__(self) -> str:
+        return f"Alchemy [{self._network}]"
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"network='{self._network}', "
+            f"status='{self.status.value}')"
+        )
+
+    ###########################################################################
+    # Extension Hooks
+    ###########################################################################
+
+    def before_request(self) -> None:
+        """Executed immediately before every RPC request."""
+        logger.debug("Executing pre-request hook.")
+
+    def after_request(self, successful: bool = True) -> None:
+        """Executed after every RPC request."""
+        super().after_request(successful)
+        logger.debug("Executing post-request hook.")
 
     ###########################################################################
     # Cleanup
     ###########################################################################
 
     def close(self) -> None:
-        """
-        Release provider resources.
-        """
-
-        logger.info(
-            "Closing Alchemy provider."
-        )
-
+        """Release provider resources."""
+        logger.info("Closing Alchemy provider.")
         super().close()
 
 

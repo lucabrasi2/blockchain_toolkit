@@ -27,8 +27,13 @@ Version
 ===============================================================================
 """
 
-from typing import Dict, Any
+from __future__ import annotations
+
+from typing import Any, Dict
+
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from core.logger import get_logger
 
@@ -37,52 +42,110 @@ logger = get_logger(__name__)
 
 class BitcoinFeeOptimizer:
     """
-    Bitcoin fee optimization.
+    Bitcoin fee optimization service.
+
+    Retrieves current fee estimates from a public Bitcoin fee provider.
+    If the provider is unavailable, built-in enterprise defaults are used
+    so that the application remains fully operational.
     """
 
-    def __init__(self):
-        self.mempool_url = "https://mempool.space/api/v1"
-        self.blockchain_info_url = "https://blockchain.info"
+    DEFAULT_FEES = {
+        "fast": 20,
+        "standard": 10,
+        "slow": 5,
+        "unit": "sat/byte",
+        "source": "default",
+        "warning": (
+            "Live fee provider unavailable. "
+            "Using built-in fee estimates."
+        ),
+    }
+
+    def __init__(self) -> None:
+        self.mempool_url = (
+            "https://mempool.space/api/v1/fees/recommended"
+        )
+
+    def _create_session(self) -> requests.Session:
+        """
+        Create a requests session with retries disabled.
+
+        Returns
+        -------
+        requests.Session
+        """
+
+        retry = Retry(
+            total=0,
+            connect=0,
+            read=0,
+            redirect=0,
+            status=0,
+        )
+
+        adapter = HTTPAdapter(max_retries=retry)
+
+        session = requests.Session()
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
+        return session
 
     def get_fee_estimate(self) -> Dict[str, Any]:
         """
-        Get current fee estimates.
+        Retrieve current Bitcoin fee estimates.
 
         Returns
         -------
         Dict[str, Any]
             Fee estimates in satoshis per byte.
         """
+
+        logger.info(
+            "Fetching Bitcoin fee estimates from mempool.space..."
+        )
+
+        session = self._create_session()
+
         try:
-            # Try mempool.space first
-            response = requests.get(f"{self.mempool_url}/fees/recommended", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "fast": data.get("fastestFee", 0),
-                    "standard": data.get("halfHourFee", 0),
-                    "slow": data.get("hourFee", 0),
-                    "unit": "sat/byte",
-                    "source": "mempool.space"
-                }
-            
-            # Fallback to blockchain.info
-            response = requests.get(f"{self.blockchain_info_url}/fee-estimates", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "fast": data.get("30", 0),
-                    "standard": data.get("60", 0),
-                    "slow": data.get("120", 0),
-                    "unit": "sat/byte",
-                    "source": "blockchain.info"
-                }
+            response = session.get(
+                self.mempool_url,
+                timeout=(3, 5),
+            )
 
-            return {"error": "Unable to fetch fee estimates"}
+            response.raise_for_status()
 
-        except Exception as error:
-            logger.error(f"Error getting fee estimate: {error}")
-            return {"error": str(error)}
+            data = response.json()
+
+            fees = {
+                "fast": data.get("fastestFee", 20),
+                "standard": data.get("halfHourFee", 10),
+                "slow": data.get("hourFee", 5),
+                "unit": "sat/byte",
+                "source": "mempool.space",
+            }
+
+            logger.info(
+                "Bitcoin fee estimates retrieved successfully."
+            )
+
+            return fees
+
+        except requests.RequestException as error:
+
+            logger.warning(
+                "Unable to reach mempool.space: %s",
+                error,
+            )
+
+            logger.warning(
+                "Using built-in Bitcoin fee estimates."
+            )
+
+            return self.DEFAULT_FEES.copy()
+
+        finally:
+            session.close()
 
     def estimate_fee(
         self,
@@ -90,21 +153,23 @@ class BitcoinFeeOptimizer:
         fee_rate: int = 10,
     ) -> Dict[str, Any]:
         """
-        Estimate transaction fee.
+        Estimate Bitcoin transaction fee.
 
         Parameters
         ----------
-        tx_size : int
+        tx_size
             Transaction size in bytes.
-        fee_rate : int
+
+        fee_rate
             Fee rate in satoshis per byte.
 
         Returns
         -------
         Dict[str, Any]
-            Estimated fee in satoshis and BTC.
         """
+
         try:
+
             total_satoshis = tx_size * fee_rate
             total_btc = total_satoshis / 100_000_000
 
@@ -116,60 +181,70 @@ class BitcoinFeeOptimizer:
             }
 
         except Exception as error:
-            logger.error(f"Error estimating fee: {error}")
-            return {"error": str(error)}
 
-    def get_optimal_fee(self, urgency: str = "standard") -> Dict[str, Any]:
+            logger.exception(
+                "Fee estimation failed."
+            )
+
+            return {
+                "error": str(error)
+            }
+
+    def get_optimal_fee(
+        self,
+        urgency: str = "standard",
+    ) -> Dict[str, Any]:
         """
-        Get optimal fee recommendations.
+        Return recommended fee for the selected urgency.
 
         Parameters
         ----------
-        urgency : str
-            'slow', 'standard', 'fast'
+        urgency
+            slow | standard | fast
 
         Returns
         -------
         Dict[str, Any]
-            Fee recommendations.
         """
-        try:
-            fee_estimates = self.get_fee_estimate()
 
-            if "error" in fee_estimates:
-                return {"error": fee_estimates["error"]}
+        fee_estimates = self.get_fee_estimate()
 
-            urgency_map = {
-                "slow": "slow",
-                "standard": "standard",
-                "fast": "fast",
-            }
+        fee_rate = fee_estimates.get(
+            urgency,
+            fee_estimates["standard"],
+        )
 
-            key = urgency_map.get(urgency, "standard")
-            fee_rate = fee_estimates.get(key, 10)
-
-            return {
-                "urgency": urgency,
-                "recommended_fee_rate_sat_byte": fee_rate,
-                "estimated_time": self._estimate_time(urgency),
-            }
-
-        except Exception as error:
-            logger.error(f"Error getting optimal fee: {error}")
-            return {"error": str(error)}
-
-    def _estimate_time(self, urgency: str) -> str:
-        """Estimate transaction confirmation time."""
-        times = {
-            "slow": "10-30 minutes",
-            "standard": "5-10 minutes",
-            "fast": "1-5 minutes",
+        return {
+            "urgency": urgency,
+            "recommended_fee_rate_sat_byte": fee_rate,
+            "estimated_time": self._estimate_time(urgency),
+            "source": fee_estimates.get("source"),
+            "warning": fee_estimates.get("warning"),
         }
-        return times.get(urgency, "unknown")
+
+    @staticmethod
+    def _estimate_time(
+        urgency: str,
+    ) -> str:
+        """
+        Estimate confirmation time.
+        """
+
+        return {
+            "slow": "10–30 minutes",
+            "standard": "5–10 minutes",
+            "fast": "1–5 minutes",
+        }.get(
+            urgency,
+            "Unknown",
+        )
 
 
 def get_fee_optimizer() -> BitcoinFeeOptimizer:
-    """Get the Bitcoin fee optimizer instance."""
+    """
+    Return Bitcoin fee optimizer instance.
+    """
+
     return BitcoinFeeOptimizer()
 
 
