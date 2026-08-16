@@ -1,18 +1,14 @@
 """
 Universal Blockchain Platform (UBP)
-
 Module:
-    Display Package
-
+ Display Package
 Purpose:
-    Centralized access to all display
-    modules in the platform.
-
+ Centralized access to all display
+ modules in the platform.
 Author: Jaramogi Diddy
 Project: Universal Blockchain Platform (UBP)
 Version: 2.0.0
 """
-
 from core.display.utils import (
     clear_screen,
     print_header,
@@ -31,7 +27,6 @@ from core.display.utils import (
     print_json,
     Colors,
 )
-
 from core.display.wallet_display import WalletDisplay
 from core.display.contract_display import ContractDisplay
 from core.display.token_display import TokenDisplay
@@ -39,7 +34,7 @@ from core.display.block_display import BlockDisplay
 from core.display.transaction_display import TransactionDisplay
 from core.display.network_display import NetworkDisplay
 from core.display.node_display import NodeDisplay
-
+from core.display.gas_display import GasDisplay
 
 __all__ = [
     # Utils
@@ -67,4 +62,5 @@ __all__ = [
     "TransactionDisplay",
     "NetworkDisplay",
     "NodeDisplay",
+    "GasDisplay",
 ]

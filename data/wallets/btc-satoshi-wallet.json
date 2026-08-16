@@ -1,0 +1,11 @@
+{
+    "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+    "created_at": "2026-08-16T21:59:06.760607+00:00",
+    "custody_type": "non_custodial",
+    "is_locked": true,
+    "metadata": {},
+    "network": "bitcoin",
+    "updated_at": "2026-08-16T21:59:06.760615+00:00",
+    "wallet_id": "btc-satoshi-wallet",
+    "wallet_type": "software"
+}

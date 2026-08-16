@@ -648,7 +648,6 @@ def test_validate_network_rejects_invalid_format(
 # Transaction ID Validation Tests
 ###############################################################################
 
-
 def test_validate_transaction_id_accepts_valid_id(
     validator: TransactionValidator,
 ) -> None:
@@ -656,10 +655,11 @@ def test_validate_transaction_id_accepts_valid_id(
     Verify validate_transaction_id accepts a valid transaction ID.
     """
 
-    assert validator.validate_transaction_id(
-        "abc123"
-    ) is True
+    transaction = create_transaction()
 
+    assert validator.validate_transaction_id(
+        transaction.transaction_id
+    ) is True
 
 def test_validate_transaction_id_rejects_empty_id(
     validator: TransactionValidator,

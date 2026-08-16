@@ -1,37 +1,15 @@
 """
-===============================================================================
 Universal Blockchain Platform (UBP)
-
-Module
-------
-bitcoin.node_validator
-
-Purpose
--------
-Bitcoin node validation and health checking.
-
-This module provides node health checks for Bitcoin nodes
-using public APIs.
-
-Author
-------
-Jaramogi Diddy
-
-Project
--------
-Universal Blockchain Platform (UBP)
-
-Version
--------
-2.0 Enterprise
-===============================================================================
+Module: Bitcoin Node Validator
+Purpose: Bitcoin node validation and health checking
+Author: UBP Engineering Team
+Version: 2.0.0
 """
-
 from typing import Dict, Any, Optional, List
 import time
-from core.http_client import http_client
-
+import requests
 from core.logger import get_logger
+from bitcoin.connection import get_connection
 
 logger = get_logger(__name__)
 
@@ -40,86 +18,126 @@ class BitcoinNodeValidator:
     """
     Bitcoin node validation and health checking.
     """
-
+    
     def __init__(self, rpc_url: Optional[str] = None):
+        """
+        Initialize the Bitcoin node validator.
+        
+        Parameters
+        ----------
+        rpc_url : str, optional
+            RPC URL to validate.
+        """
         self.rpc_url = rpc_url
-        self.blockchain_info_url = "https://blockchain.info"
-
+    
     def validate(self) -> Dict[str, Any]:
         """
-        Perform full node validation.
-
+        Perform a complete node validation.
+        
         Returns
         -------
         Dict[str, Any]
             Node validation report.
         """
-        logger.info("Starting node validation for Bitcoin")
-
         result = {
-            "network": "Bitcoin",
+            "rpc_url": self.rpc_url or "default",
             "is_connected": False,
             "is_syncing": False,
-            "node_type": "Full Node",
+            "node_type": "Unknown",
             "chain_id": 0,
+            "network_id": None,
             "block_number": 0,
             "peer_count": 0,
-            "response_time_ms": 0,
-            "client_version": "Bitcoin Core",
+            "response_time_ms": 0.0,
+            "client_version": "Unknown",
+            "protocol_version": None,
+            "archive_node": False,
+            "gas_price": None,
             "health_status": "Unknown",
             "issues": [],
             "details": {},
         }
-
+        
         try:
-            start_time = time.time()
-
-            # Get latest block
-            response = http_client.get(f"{self.blockchain_info_url}/latestblock", timeout=10)
+            start = time.perf_counter()
             
-            if response.status_code == 200:
-                data = response.json()
-                result["block_number"] = data.get("height", 0)
+            # Get connection
+            client = get_connection(self.rpc_url)
+            
+            # Check connection
+            if client.is_connected():
                 result["is_connected"] = True
-                result["response_time_ms"] = round((time.time() - start_time) * 1000, 2)
                 
-                # Get additional stats
+                # Get blockchain info
                 try:
-                    stats_response = http_client.get(f"{self.blockchain_info_url}/stats", timeout=10)
-                    if stats_response.status_code == 200:
-                        stats = stats_response.json()
-                        result["details"]["total_transactions"] = stats.get("n_tx", 0)
-                        result["details"]["total_blocks"] = stats.get("n_blocks", 0)
-                except Exception:
-                    pass
+                    info = client.get_blockchain_info()
+                    if info and "error" not in info:
+                        result["block_number"] = info.get("blocks", 0)
+                        result["node_type"] = "Full Node"
+                    else:
+                        result["issues"].append("Could not fetch blockchain info")
+                except Exception as e:
+                    result["issues"].append(f"Blockchain info error: {e}")
                 
-                result["health_status"] = "Healthy 🟢"
+                # Get network info
+                try:
+                    network_info = client.get_network_info()
+                    if network_info:
+                        result["peer_count"] = network_info.get("connections", 0)
+                        result["client_version"] = str(network_info.get("version", "Unknown"))
+                        result["protocol_version"] = network_info.get("protocolversion")
+                except Exception as e:
+                    result["issues"].append(f"Network info error: {e}")
+                
+                # Get latest block
+                try:
+                    latest = client.get_latest_block()
+                    if latest and "error" not in latest:
+                        result["block_number"] = latest.get("number", result["block_number"])
+                except Exception as e:
+                    result["issues"].append(f"Latest block error: {e}")
+                
+                # Calculate response time
+                elapsed = (time.perf_counter() - start) * 1000
+                result["response_time_ms"] = round(elapsed, 2)
+                
+                # Determine health
+                issues_count = len(result["issues"])
+                if issues_count == 0:
+                    result["health_status"] = "Healthy"
+                elif issues_count <= 2:
+                    result["health_status"] = "Degraded"
+                else:
+                    result["health_status"] = "Unhealthy"
+                    
                 logger.info("Bitcoin node validation successful")
             else:
-                result["issues"].append("Unable to reach blockchain.info API")
-                result["health_status"] = "Degraded 🟡"
-
-        except Exception as error:
-            logger.error(f"Bitcoin node validation failed: {error}")
-            result["issues"].append(f"Connection error: {str(error)}")
-            result["health_status"] = "Unhealthy 🔴"
-
+                result["is_connected"] = False
+                result["issues"].append("Node is not reachable")
+                result["health_status"] = "Unhealthy"
+                
+        except Exception as e:
+            result["is_connected"] = False
+            result["issues"].append(str(e))
+            result["health_status"] = "Unhealthy"
+            logger.error(f"Bitcoin node validation error: {e}")
+        
         return result
 
 
 def validate_node(rpc_url: Optional[str] = None) -> Dict[str, Any]:
     """
-    Validate a Bitcoin node.
-
+    Validate a single Bitcoin node.
+    
     Parameters
     ----------
     rpc_url : str, optional
-        RPC URL to validate.
-
+        RPC endpoint.
+        
     Returns
     -------
     Dict[str, Any]
-        Node validation report.
+        Validation report.
     """
     validator = BitcoinNodeValidator(rpc_url)
     return validator.validate()
@@ -128,61 +146,57 @@ def validate_node(rpc_url: Optional[str] = None) -> Dict[str, Any]:
 def compare_nodes(node_urls: List[str]) -> Dict[str, Any]:
     """
     Compare multiple Bitcoin nodes.
-
+    
     Parameters
     ----------
     node_urls : List[str]
-        List of node URLs to compare.
-
+        RPC URLs.
+        
     Returns
     -------
     Dict[str, Any]
         Comparison report.
     """
     logger.info(f"Comparing {len(node_urls)} Bitcoin nodes")
-
+    
     results = []
     latest_blocks = {}
-
+    
     for url in node_urls:
         try:
             validator = BitcoinNodeValidator(url)
-            result = validator.validate()
-            results.append(result)
-
-            if result.get("is_connected"):
-                latest_blocks[url] = result.get("block_number", 0)
-        except Exception as error:
-            logger.error(f"Error validating node {url}: {error}")
+            report = validator.validate()
+            results.append(report)
+            if report.get("is_connected"):
+                latest_blocks[url] = report.get("block_number", 0)
+        except Exception as e:
+            logger.error(f"Error validating node {url}: {e}")
             results.append({
                 "rpc_url": url,
                 "is_connected": False,
-                "error": str(error),
+                "health_status": "Unhealthy",
+                "error": str(e),
             })
-
+    
+    # Determine consensus
     if latest_blocks:
-        block_heights = list(latest_blocks.values())
-        max_block = max(block_heights)
-        min_block = min(block_heights)
-        block_diff = max_block - min_block
-        is_consistent = block_diff < 10
+        heights = list(latest_blocks.values())
+        highest = max(heights)
+        lowest = min(heights)
+        difference = highest - lowest
+        consistent = difference <= 10
     else:
-        is_consistent = False
-        block_diff = None
-
+        difference = None
+        consistent = False
+    
     return {
         "nodes_checked": len(node_urls),
         "nodes_connected": sum(1 for r in results if r.get("is_connected")),
         "same_chain": True,
-        "block_height_consistent": is_consistent,
+        "block_height_consistent": consistent,
         "chain_ids": [0],
         "latest_blocks": latest_blocks,
-        "block_difference": block_diff,
+        "block_difference": difference,
         "results": results,
-        "consensus_status": "✅ Reached" if is_consistent else "❌ Not Reached",
+        "consensus_status": "Reached" if consistent else "Not Reached",
     }
-
-
-###############################################################################
-# End of File
-###############################################################################

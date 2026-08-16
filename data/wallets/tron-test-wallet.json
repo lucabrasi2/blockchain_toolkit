@@ -1,0 +1,11 @@
+{
+    "address": "TYMrhPDPkLkHT2BzT1z3vN9FqXCCbNvT6x",
+    "created_at": "2026-08-16T22:10:15.270261+00:00",
+    "custody_type": "non_custodial",
+    "is_locked": true,
+    "metadata": {},
+    "network": "tron",
+    "updated_at": "2026-08-16T22:10:15.270269+00:00",
+    "wallet_id": "tron-test-wallet",
+    "wallet_type": "software"
+}

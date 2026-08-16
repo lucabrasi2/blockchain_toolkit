@@ -1,0 +1,81 @@
+{
+    "1": {
+        "wallet_id": "1",
+        "address": "eth-usdc-wallet",
+        "network": "ethereum",
+        "wallet_type": "software",
+        "custody_type": "non_custodial",
+        "metadata": {
+            "created_at": "2026-08-16T18:02:16.160908+00:00",
+            "created_by": "CLI",
+            "label": "usdc-contract",
+            "purpose": "USDC contract wallet"
+        },
+        "created_at": "2026-08-16T18:16:27.518568+00:00",
+        "updated_at": "2026-08-16T18:16:27.518580+00:00",
+        "is_locked": true
+    },
+    "btc-wallet": {
+        "wallet_id": "btc-wallet",
+        "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+        "network": "bitcoin",
+        "wallet_type": "software",
+        "custody_type": "non_custodial",
+        "metadata": {
+            "created_at": "2026-08-16T18:03:47.990519+00:00",
+            "created_by": "CLI",
+            "label": "satoshi-address",
+            "purpose": "bitcoin wallet"
+        },
+        "created_at": "2026-08-16T18:16:27.520380+00:00",
+        "updated_at": "2026-08-16T18:16:27.520393+00:00",
+        "is_locked": true
+    },
+    "eth-main-wallet": {
+        "wallet_id": "eth-main-wallet",
+        "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+        "network": "ethereum",
+        "wallet_type": "software",
+        "custody_type": "non_custodial",
+        "metadata": {
+            "created_at": "2026-08-16T18:00:05.839772+00:00",
+            "created_by": "CLI",
+            "label": "vitalik-address",
+            "purpose": "main ethereum wallet"
+        },
+        "created_at": "2026-08-16T18:16:27.520756+00:00",
+        "updated_at": "2026-08-16T18:16:27.520764+00:00",
+        "is_locked": true
+    },
+    "test-wallet-001": {
+        "wallet_id": "test-wallet-001",
+        "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+        "network": "ethereum",
+        "wallet_type": "software",
+        "custody_type": "non_custodial",
+        "metadata": {
+            "created_at": "2026-08-16T12:41:42.407945",
+            "created_by": "CLI",
+            "purpose": "testing"
+        },
+        "created_at": "2026-08-16T18:16:27.522306+00:00",
+        "updated_at": "2026-08-16T18:16:27.522320+00:00",
+        "is_locked": true
+    },
+    "tron-wallet": {
+        "wallet_id": "tron-wallet",
+        "address": "TYMrhPDPkLkHT2BzT1z3vN9FqXCCbNvT6x",
+        "network": "tron",
+        "wallet_type": "software",
+        "custody_type": "non_custodial",
+        "metadata": {
+            "created_at": "2026-08-16T18:05:22.611603+00:00",
+            "created_by": "CLI",
+            "label": "tron-address",
+            "purpose": "tron wallet"
+        },
+        "created_at": "2026-08-16T18:16:27.523651+00:00",
+        "updated_at": "2026-08-16T18:16:27.523663+00:00",
+        "is_locked": true
+    }
+}

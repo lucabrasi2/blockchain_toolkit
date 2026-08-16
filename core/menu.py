@@ -1,100 +1,49 @@
+#!/usr/bin/env python3
 """
-===============================================================================
 Universal Blockchain Platform (UBP)
-
-Module
-------
-core.menu
-
-Purpose
--------
-Application menu definitions for the CLI.
-
-Author
-------
-Jaramogi Diddy
-
-Project
--------
-Universal Blockchain Platform (UBP)
-
-Version
--------
-2.0 Enterprise
-===============================================================================
+Module: core/menu.py
+Purpose: Menu definitions for CLI
+Author: UBP Engineering Team
+Version: 2.2.0
 """
-
-from core.display.utils import (
-    clear_screen,
-    print_header,
-    print_divider,
-    print_error,
-    print_info,
-    print_bold,
-)
+from core.display.utils import clear_screen, print_header, print_divider, print_error, print_info
 
 
 class MainMenu:
-    """
-    Main application menu.
-    """
-
+    """Main application menu."""
+    
     @staticmethod
     def display() -> str:
-        """
-        Display the main menu and get user choice.
-
-        Returns
-        -------
-        str
-            User's menu selection.
-        """
         clear_screen()
-        print_header("🌐 UNIVERSAL BLOCKCHAIN PLATFORM (UBP)", "=", 60)
-        print("  Version: 2.0.0")
-        print("  Author: Jaramogi Diddy")
-        print_divider("=", 60)
+        print_header(" UNIVERSAL BLOCKCHAIN PLATFORM", "=", 60)
         print()
-
-        print("📋 MAIN MENU")
+        print(" Main Menu")
         print_divider("-", 40)
         print("  1. 🟣 Ethereum")
         print("  2. 🟠 Bitcoin")
         print("  3. 🔴 TRON")
-        print("  4. ⚙️  Settings")
-        print("  5. 📖 Help")
-        print("  6. 🚪 Exit")
+        print("  4. 👛 Wallet Management")
+        print("  5. ⚙️  Settings")
+        print("  6. 📖 Help")
+        print("  7. 🚪 Exit")
         print_divider("-", 40)
-
-        return input("\nEnter your choice (1-6): ").strip()
-
+        return input("\nEnter your choice (1-7): ").strip()
+    
     @staticmethod
     def invalid_choice() -> None:
-        """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-6.")
+        print_error("Invalid choice. Please enter 1-7.")
         input("\nPress Enter to continue...")
 
 
 class EthereumMenu:
-    """
-    Ethereum blockchain menu.
-    """
-
+    """Ethereum blockchain menu."""
+    
     @staticmethod
     def display() -> str:
-        """
-        Display the Ethereum menu and get user choice.
-
-        Returns
-        -------
-        str
-            User's menu selection.
-        """
         clear_screen()
-        print_header("🟣 ETHEREUM MODULE", "=", 60)
+        print_header(" 🟣 ETHEREUM MODULE", "=", 60)
         print()
-
-        print("🔹 Ethereum Operations")
+        print(" Ethereum Operations")
         print_divider("-", 40)
         print("  1. 👛 Inspect Wallet")
         print("  2. 📄 Inspect Contract")
@@ -106,74 +55,49 @@ class EthereumMenu:
         print("  8. ⛽ Gas Price Optimization")
         print("  9. 🔙 Back to Main Menu")
         print_divider("-", 40)
-
         return input("\nEnter your choice (1-9): ").strip()
-
+    
     @staticmethod
     def invalid_choice() -> None:
-        """Display invalid choice message."""
         print_error("Invalid choice. Please enter 1-9.")
         input("\nPress Enter to continue...")
 
 
 class BitcoinMenu:
-    """
-    Bitcoin blockchain menu.
-    """
-
+    """Bitcoin blockchain menu."""
+    
     @staticmethod
     def display() -> str:
-        """
-        Display the Bitcoin menu and get user choice.
-
-        Returns
-        -------
-        str
-            User's menu selection.
-        """
         clear_screen()
-        print_header("🟠 BITCOIN MODULE", "=", 60)
+        print_header(" 🟠 BITCOIN MODULE", "=", 60)
         print()
-
-        print("🔹 Bitcoin Operations")
+        print(" Bitcoin Operations")
         print_divider("-", 40)
         print("  1. 👛 Inspect Wallet")
         print("  2. 🔍 Explore Block")
         print("  3. 📊 Analyze Transaction")
         print("  4. 🖥️  Validate Node")
-        print("  5. ⛽ Fee Optimization")
-        print("  6. 🔙 Back to Main Menu")
+        print("  5. 🔄 Compare Nodes")
+        print("  6. ⛽ Fee Optimization")
+        print("  7. 🔙 Back to Main Menu")
         print_divider("-", 40)
-
-        return input("\nEnter your choice (1-6): ").strip()
-
+        return input("\nEnter your choice (1-7): ").strip()
+    
     @staticmethod
     def invalid_choice() -> None:
-        """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-6.")
+        print_error("Invalid choice. Please enter 1-7.")
         input("\nPress Enter to continue...")
 
 
 class TronMenu:
-    """
-    TRON blockchain menu.
-    """
-
+    """TRON blockchain menu."""
+    
     @staticmethod
     def display() -> str:
-        """
-        Display the TRON menu and get user choice.
-
-        Returns
-        -------
-        str
-            User's menu selection.
-        """
         clear_screen()
-        print_header("🔴 TRON MODULE", "=", 60)
+        print_header(" 🔴 TRON MODULE", "=", 60)
         print()
-
-        print("🔹 TRON Operations")
+        print(" TRON Operations")
         print_divider("-", 40)
         print("  1. 👛 Inspect Wallet")
         print("  2. 📄 Inspect Contract")
@@ -182,127 +106,133 @@ class TronMenu:
         print("  5. 📊 Analyze Transaction")
         print("  6. 🖥️  Validate Node")
         print("  7. 🔄 Compare Nodes")
-        print("  8. 🔙 Back to Main Menu")
+        print("  8. ⚡ Energy Optimization")
+        print("  9. 🔙 Back to Main Menu")
         print_divider("-", 40)
-
-        return input("\nEnter your choice (1-8): ").strip()
-
+        return input("\nEnter your choice (1-9): ").strip()
+    
     @staticmethod
     def invalid_choice() -> None:
-        """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-8.")
+        print_error("Invalid choice. Please enter 1-9.")
+        input("\nPress Enter to continue...")
+
+
+class WalletMenu:
+    """Wallet management menu with all features."""
+    
+    @staticmethod
+    def display() -> str:
+        clear_screen()
+        print_header(" 👛 WALLET MANAGEMENT", "=", 60)
+        print()
+        print(" Wallet Operations")
+        print_divider("-", 40)
+        print("  1. 🔑 Create New Wallet")
+        print("  2. 📋 List All Wallets")
+        print("  3. 🔍 Inspect Wallet")
+        print("  4. 🗑️  Delete Wallet")
+        print("  5. 🔒 Lock Wallet")
+        print("  6. 🔓 Unlock Wallet")
+        print("  7. 📊 Wallet Status")
+        print("  8. 📤 Export Wallet")
+        print("  9. 📥 Import Wallet")
+        print(" 10. 💾 Backup All Wallets")
+        print(" 11. 📂 Restore Wallets")
+        print(" 12. 📈 Monitor Balances")
+        print(" 13. 📜 Transaction History")
+        print(" 14. 🔙 Back to Main Menu")
+        print_divider("-", 40)
+        return input("\nEnter your choice (1-14): ").strip()
+    
+    @staticmethod
+    def invalid_choice() -> None:
+        print_error("Invalid choice. Please enter 1-14.")
         input("\nPress Enter to continue...")
 
 
 class SettingsMenu:
-    """
-    Settings menu.
-    """
-
+    """Settings menu."""
+    
     @staticmethod
     def display() -> str:
-        """
-        Display the settings menu and get user choice.
-
-        Returns
-        -------
-        str
-            User's menu selection.
-        """
         clear_screen()
-        print_header("⚙️  SETTINGS", "=", 60)
+        print_header(" ⚙️ SETTINGS", "=", 60)
         print()
-
-        print("🔹 Settings Options")
+        print(" Settings")
         print_divider("-", 40)
-        print("  1. 🔄 Switch Network")
-        print("  2. 🔌 Select Provider")
-        print("  3. 📝 View Configuration")
-        print("  4. 🔙 Back to Main Menu")
+        print("  1. 📁 Storage Location")
+        print("  2. 🌐 Default Network")
+        print("  3. 🔌 Provider Selection")
+        print("  4. 📊 Show Configuration")
+        print("  5. 🔙 Back to Main Menu")
         print_divider("-", 40)
-
-        return input("\nEnter your choice (1-4): ").strip()
-
+        return input("\nEnter your choice (1-5): ").strip()
+    
     @staticmethod
     def invalid_choice() -> None:
-        """Display invalid choice message."""
-        print_error("Invalid choice. Please enter 1-4.")
+        print_error("Invalid choice. Please enter 1-5.")
         input("\nPress Enter to continue...")
 
 
 class HelpMenu:
-    """
-    Help menu.
-    """
-
+    """Help menu."""
+    
     @staticmethod
-    def display() -> None:
-        """
-        Display help information.
-        """
+    def display() -> str:
         clear_screen()
-        print_header("📖 HELP", "=", 60)
+        print_header(" 📖 HELP", "=", 60)
         print()
-
-        print("Universal Blockchain Platform (UBP)")
-        print("Version: 2.0.0")
+        print(" Universal Blockchain Platform (UBP)")
+        print(" Version: 3.0.0")
+        print()
+        print(" Features:")
+        print("   • Wallet Inspection (Ethereum, Bitcoin, TRON)")
+        print("   • Wallet Creation & Management")
+        print("   • Wallet Export/Import")
+        print("   • Wallet Backup/Restore")
+        print("   • Transaction Signing (Ethereum)")
+        print("   • Balance Monitoring")
+        print("   • Transaction History")
+        print("   • Contract Analysis (Ethereum, TRON)")
+        print("   • Token Information (ERC-20, TRC-20)")
+        print("   • Block Exploration")
+        print("   • Transaction Analysis")
+        print("   • Node Validation & Comparison")
+        print("   • Gas/Energy Optimization")
+        print()
+        print(" Supported Blockchains:")
+        print("   • Ethereum")
+        print("   • Bitcoin")
+        print("   • TRON")
+        print()
+        print(" Wallet Management:")
+        print("   • Create/List/Inspect/Delete wallets")
+        print("   • Lock/Unlock wallets")
+        print("   • Export/Import/Backup/Restore")
+        print("   • Monitor balances")
+        print("   • View transaction history")
         print_divider("-", 40)
-        print()
-
-        print("📌 DESCRIPTION")
-        print("  A modular, provider-independent blockchain")
-        print("  intelligence platform for multiple networks.")
-        print()
-
-        print("🛠️  FEATURES")
-        print("  • Wallet Inspection (Ethereum, Bitcoin, TRON)")
-        print("  • Contract Analysis (Ethereum, TRON)")
-        print("  • Token Information (ERC-20, TRC-20)")
-        print("  • Block Exploration (Ethereum, Bitcoin, TRON)")
-        print("  • Transaction Analysis (Ethereum, Bitcoin, TRON)")
-        print("  • Node Validation & Comparison")
-        print("  • Gas/Energy/Fee Optimization")
-        print()
-
-        print("⛓️  SUPPORTED BLOCKCHAINS")
-        print("  • 🟣 Ethereum (Mainnet, Sepolia, Holesky)")
-        print("  • 🟠 Bitcoin (Mainnet)")
-        print("  • 🔴 TRON (Mainnet)")
-        print()
-
-        print("🔌 PROVIDER SUPPORT")
-        print("  • Alchemy")
-        print("  • Infura")
-        print("  • QuickNode")
-        print("  • Ankr")
-        print("  • Public Endpoints")
-        print("  • Self-hosted Nodes")
-        print()
-
-        print("📂 PROJECT STRUCTURE")
-        print("  • controllers/  - Handle user input")
-        print("  • services/     - Business logic")
-        print("  • providers/    - Blockchain communication")
-        print("  • core/display/ - Formatting and display")
-        print("  • core/models/  - Data models")
-        print("  • config/       - Configuration")
-        print("  • tests/        - Unit tests")
-        print()
-
-        print("📚 DOCUMENTATION")
-        print("  • docs/ENGINEERING_BIBLE.md")
-        print("  • docs/CHANGELOG.md")
-        print("  • docs/ROADMAP.md")
-        print()
-
-        input("Press Enter to continue...")
+        input("\nPress Enter to continue...")
+        return "back"
+    
+    @staticmethod
+    def invalid_choice() -> None:
+        print_error("Invalid choice.")
+        input("\nPress Enter to continue...")
 
 
-def main_menu():
-    """Legacy function for backward compatibility."""
+# Backward compatibility
+def main_menu() -> str:
     return MainMenu.display()
 
 
-###############################################################################
-# End of File
-###############################################################################
+def ethereum_menu() -> str:
+    return EthereumMenu.display()
+
+
+def bitcoin_menu() -> str:
+    return BitcoinMenu.display()
+
+
+def tron_menu() -> str:
+    return TronMenu.display()

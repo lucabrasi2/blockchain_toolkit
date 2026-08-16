@@ -29,26 +29,21 @@ TRON_API_URL = os.getenv(
 
 TRONGRID_API_KEY = os.getenv("TRONGRID_API_KEY")
 
-
 def get_transaction(tx_hash: str) -> Dict[str, Any]:
     """
     Get TRON transaction by hash.
-
-    Parameters
-    ----------
-    tx_hash : str
-        Transaction hash.
-
-    Returns
-    -------
-    Dict[str, Any]
-        Transaction information.
     """
+    # Clean the hash
+    tx_hash = tx_hash.strip()
+    if tx_hash.startswith('0x'):
+        tx_hash = tx_hash[2:]
+    
+    # Validate length
     if len(tx_hash) != 64:
-     return {
-        "hash": tx_hash,
-        "error": "Invalid TRON transaction hash",
-    }
+        return {
+            "hash": tx_hash,
+            "error": "Invalid TRON transaction hash. Must be 64 characters."
+        }
     try:
         headers = {}
         if TRONGRID_API_KEY:
