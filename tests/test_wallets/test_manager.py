@@ -13,6 +13,8 @@ Unit tests for WalletManager.
 These tests verify that the wallet manager correctly orchestrates the
 wallet subsystem.
 
+Step 4 — Type Contract Verification
+
 Author
 ------
 Jaramogi Diddy
@@ -390,6 +392,9 @@ def test_encrypt_and_decrypt(
 ):
     """
     Manager delegates encryption correctly.
+
+    Verifies that encrypt_data returns a dict payload and
+    decrypt_data returns the original plaintext.
     """
 
     plaintext = "UBP Enterprise Wallet"
@@ -399,12 +404,42 @@ def test_encrypt_and_decrypt(
         "secret-password",
     )
 
+    # Critical: encrypted payload must be a dictionary
+    assert isinstance(encrypted, dict)
+    assert "ciphertext" in encrypted
+    assert "salt" in encrypted
+    assert "nonce" in encrypted
+
     decrypted = manager.decrypt_data(
         encrypted,
         "secret-password",
     )
 
     assert decrypted == plaintext
+
+
+def test_encrypt_and_decrypt_bytes(
+    manager: WalletManager,
+):
+    """
+    Manager delegates bytes encryption correctly.
+    """
+
+    original = b"\x00\x01\x02\xff"
+
+    encrypted = manager.encrypt_data(
+        original,
+        "secret-password",
+    )
+
+    assert isinstance(encrypted, dict)
+
+    decrypted = manager.decrypt_data(
+        encrypted,
+        "secret-password",
+    )
+
+    assert decrypted == original
 
 
 ###############################################################################

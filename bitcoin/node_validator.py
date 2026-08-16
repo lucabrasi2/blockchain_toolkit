@@ -29,7 +29,7 @@ Version
 
 from typing import Dict, Any, Optional, List
 import time
-import requests
+from core.http_client import http_client
 
 from core.logger import get_logger
 
@@ -75,7 +75,7 @@ class BitcoinNodeValidator:
             start_time = time.time()
 
             # Get latest block
-            response = requests.get(f"{self.blockchain_info_url}/latestblock", timeout=10)
+            response = http_client.get(f"{self.blockchain_info_url}/latestblock", timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
@@ -85,7 +85,7 @@ class BitcoinNodeValidator:
                 
                 # Get additional stats
                 try:
-                    stats_response = requests.get(f"{self.blockchain_info_url}/stats", timeout=10)
+                    stats_response = http_client.get(f"{self.blockchain_info_url}/stats", timeout=10)
                     if stats_response.status_code == 200:
                         stats = stats_response.json()
                         result["details"]["total_transactions"] = stats.get("n_tx", 0)

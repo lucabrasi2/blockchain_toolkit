@@ -16,12 +16,12 @@ validation services for wallet data.
 Responsibilities
 ----------------
 - Generate cryptographic salts
-- Derive encryption keys
-- Encrypt wallet data
+- Derive encryption keys (PBKDF2, Argon2id)
+- Encrypt wallet data (str or bytes)
 - Decrypt wallet data
 - Validate encrypted payloads
 - Generate data hashes
-- Verify hashes
+- Verify hashes (timing-safe)
 
 Architecture
 ------------
@@ -33,6 +33,7 @@ EncryptionManager
       |
       ├── Salt Generator
       ├── PBKDF2 Key Derivation
+      ├── Argon2id Key Derivation (optional)
       ├── AES-256 Encryption
       ├── Payload Validator
       └── SHA-256 Integrity Layer
@@ -48,7 +49,7 @@ Universal Blockchain Platform (UBP)
 
 Version
 -------
-2.0 Enterprise
+2.1 Enterprise  (Step 3 — Hardened Encryption)
 ===============================================================================
 """
 
@@ -59,6 +60,7 @@ from __future__ import annotations
 import os
 import base64
 import hashlib
+import hmac
 
 
 from typing import Any
@@ -72,8 +74,27 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-from wallets.exceptions import WalletValidationError
+from wallets.exceptions import (
+    WalletValidationError,
+)
 
+
+###############################################################################
+# Optional Argon2id Support
+###############################################################################
+
+
+try:
+    from argon2.low_level import (
+        hash_secret_raw,
+        Type,
+    )
+
+    ARGON2_AVAILABLE = True
+
+except ImportError:
+
+    ARGON2_AVAILABLE = False
 
 
 ###############################################################################
@@ -85,7 +106,7 @@ class EncryptionManager:
     """
     Enterprise wallet encryption service.
 
-    Provides AES-256 encryption with PBKDF2 key derivation.
+    Provides AES-256 encryption with PBKDF2 or Argon2id key derivation.
     """
 
 
@@ -116,7 +137,7 @@ class EncryptionManager:
 
 
         self.algorithm = algorithm
-    
+
     ###########################################################################
     # Salt Generation
     ###########################################################################
@@ -147,9 +168,10 @@ class EncryptionManager:
         self,
         password: str,
         salt: bytes,
+        iterations: int = 390000,
     ) -> bytes:
         """
-        Derive AES-256 encryption key.
+        Derive AES-256 encryption key via PBKDF2.
 
         Parameters
         ----------
@@ -158,6 +180,10 @@ class EncryptionManager:
 
         salt:
             Cryptographic salt.
+
+        iterations:
+            PBKDF2 iteration count.
+            OWASP minimum is 390,000 for SHA-256.
 
         Returns
         -------
@@ -191,7 +217,7 @@ class EncryptionManager:
 
             salt=salt,
 
-            iterations=390000,
+            iterations=iterations,
 
         )
 
@@ -205,6 +231,78 @@ class EncryptionManager:
         )
 
 
+    def derive_key_argon2id(
+        self,
+        password: str,
+        salt: bytes,
+    ) -> bytes:
+        """
+        Derive AES-256 encryption key via Argon2id.
+
+        Argon2id is memory-hard and resistant to GPU/ASIC attacks.
+        It is preferred over PBKDF2 for new keystore files.
+
+        Parameters
+        ----------
+        password:
+            User encryption password.
+
+        salt:
+            Cryptographic salt (must be >= 8 bytes).
+
+        Returns
+        -------
+        bytes
+            Derived 256-bit key.
+
+        Raises
+        ------
+        WalletValidationError
+            If argon2-cffi is not installed.
+        """
+
+        if not ARGON2_AVAILABLE:
+
+            raise WalletValidationError(
+                "Argon2id requires the 'argon2-cffi' package. "
+                "Install with: pip install argon2-cffi"
+            )
+
+        if not password:
+
+            raise WalletValidationError(
+                "Password cannot be empty."
+            )
+
+        if not isinstance(
+            salt,
+            bytes,
+        ):
+
+            raise WalletValidationError(
+                "Salt must be bytes."
+            )
+
+        return hash_secret_raw(
+
+            secret=password.encode(
+                "utf-8"
+            ),
+
+            salt=salt,
+
+            memory_cost=65536,
+
+            time_cost=3,
+
+            parallelism=4,
+
+            hash_len=32,
+
+            type=Type.ID,
+
+        )
+
 
     ###########################################################################
     # Encryption
@@ -213,8 +311,9 @@ class EncryptionManager:
 
     def encrypt(
         self,
-        data: str,
+        data: str | bytes,
         password: str,
+        **options: Any,
     ) -> Dict[str, Any]:
         """
         Encrypt plaintext data.
@@ -222,67 +321,128 @@ class EncryptionManager:
         Parameters
         ----------
         data:
-            Data to encrypt.
+            Data to encrypt.  Accepts str or bytes.
 
         password:
             Encryption password.
 
+        options:
+            Optional encryption configuration.
+
+        Supported options
+        -----------------
+        kdf:
+            Key derivation function: "pbkdf2" (default) or "argon2id".
+
+        iterations:
+            PBKDF2 iteration count.  Defaults to 390000.
+
         Returns
         -------
         dict
-            Encrypted payload.
+            Encrypted payload with versioned metadata.
         """
 
 
         if not isinstance(
             data,
-            str,
+            (
+                str,
+                bytes,
+            ),
         ):
 
             raise WalletValidationError(
-                "Data must be a string."
+                "Data must be a string or bytes."
             )
 
 
+        kdf = options.get(
+            "kdf",
+            "pbkdf2",
+        ).lower()
+
+        iterations = options.get(
+            "iterations",
+            390000,
+        )
+
         salt = self.generate_salt()
 
+        if kdf == "pbkdf2":
 
-        key = self.derive_key(
+            key = self.derive_key(
+                password,
+                salt,
+                iterations=iterations,
+            )
 
-            password,
+        elif kdf == "argon2id":
 
-            salt,
+            key = self.derive_key_argon2id(
+                password,
+                salt,
+            )
 
-        )
+        else:
+
+            raise WalletValidationError(
+                f"Unsupported KDF: {kdf}"
+            )
 
 
         nonce = os.urandom(12)
 
 
         cipher = AESGCM(
-
             key
-
         )
+
+        if isinstance(
+            data,
+            str,
+        ):
+
+            plaintext = data.encode(
+                "utf-8"
+            )
+
+            data_encoding = "utf-8"
+
+        else:
+
+            plaintext = data
+
+            data_encoding = "raw"
 
 
         ciphertext = cipher.encrypt(
 
             nonce,
 
-            data.encode(
-                "utf-8"
-            ),
+            plaintext,
 
             None,
 
         )
 
 
-        return {
+        payload = {
+
+            "version":
+                "2.1",
+
 
             "algorithm":
                 self.algorithm,
+
+
+            "kdf":
+                kdf,
+
+
+            "iterations":
+                iterations,
 
 
             "salt":
@@ -308,7 +468,13 @@ class EncryptionManager:
                     "utf-8"
                 ),
 
+
+            "data_encoding":
+                data_encoding,
+
         }
+
+        return payload
 
 
 
@@ -321,7 +487,7 @@ class EncryptionManager:
         self,
         payload: Dict[str, Any],
         password: str,
-    ) -> str:
+    ) -> str | bytes:
         """
         Decrypt encrypted wallet data.
 
@@ -335,8 +501,15 @@ class EncryptionManager:
 
         Returns
         -------
-        str
-            Original plaintext.
+        str | bytes
+            Original plaintext.  Returns str when the original
+            data was a string; returns bytes when the original
+            data was bytes.
+
+        Raises
+        ------
+        WalletValidationError
+            If payload is invalid or KDF is unsupported.
         """
 
 
@@ -366,19 +539,41 @@ class EncryptionManager:
         )
 
 
-        key = self.derive_key(
+        kdf = payload.get(
+            "kdf",
+            "pbkdf2",
+        ).lower()
 
-            password,
-
-            salt,
-
+        iterations = payload.get(
+            "iterations",
+            390000,
         )
 
 
+        if kdf == "pbkdf2":
+
+            key = self.derive_key(
+                password,
+                salt,
+                iterations=iterations,
+            )
+
+        elif kdf == "argon2id":
+
+            key = self.derive_key_argon2id(
+                password,
+                salt,
+            )
+
+        else:
+
+            raise WalletValidationError(
+                f"Unsupported KDF: {kdf}"
+            )
+
+
         cipher = AESGCM(
-
             key
-
         )
 
 
@@ -393,10 +588,21 @@ class EncryptionManager:
         )
 
 
-        return plaintext.decode(
-            "utf-8"
+        data_encoding = payload.get(
+            "data_encoding",
+            "utf-8",
         )
-    
+
+
+        if data_encoding == "utf-8":
+
+            return plaintext.decode(
+                "utf-8"
+            )
+
+        return plaintext
+
+
     ###########################################################################
     # Payload Validation
     ###########################################################################
@@ -524,7 +730,7 @@ class EncryptionManager:
         digest: str,
     ) -> bool:
         """
-        Verify SHA-256 hash.
+        Verify SHA-256 hash using constant-time comparison.
 
         Parameters
         ----------
@@ -538,6 +744,10 @@ class EncryptionManager:
         -------
         bool
             True if hashes match.
+
+        Notes
+        -----
+        Uses hmac.compare_digest to prevent timing attacks.
         """
 
 
@@ -548,7 +758,17 @@ class EncryptionManager:
         )
 
 
-        return generated_hash == digest
+        return hmac.compare_digest(
+
+            generated_hash.encode(
+                "utf-8"
+            ),
+
+            digest.encode(
+                "utf-8"
+            ),
+
+        )
 
 
 
@@ -577,15 +797,21 @@ class EncryptionManager:
 
 
             "version":
-                "2.0 Enterprise",
+                "2.1 Enterprise",
 
 
             "algorithm":
                 self.algorithm,
 
 
-            "key_derivation":
+            "kdf_primary":
                 "PBKDF2-HMAC-SHA256",
+
+
+            "kdf_alternative":
+                "Argon2id"
+                if ARGON2_AVAILABLE
+                else "not installed",
 
 
             "hash":
@@ -596,7 +822,9 @@ class EncryptionManager:
                 "256-bit",
 
         }
-    
+
+
+
     ###########################################################################
     # Representation
     ###########################################################################

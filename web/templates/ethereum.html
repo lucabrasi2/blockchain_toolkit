@@ -23,6 +23,7 @@
         .header h1 {
             font-size: 28px;
             background: linear-gradient(135deg, #6c5ce7, #00b894);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -228,54 +229,82 @@
 
         function displayResult(elementId, data) {
             const el = document.getElementById(elementId);
-            if (data.error) {
+            if (data && data.error) {
                 el.innerHTML = `<span class="error">❌ ${data.error}</span>`;
-            } else {
+            } else if (data) {
                 el.innerHTML = `<span class="success">✅ Success</span>\n${JSON.stringify(data, null, 2)}`;
+            } else {
+                el.innerHTML = `<span class="error">❌ No data returned</span>`;
             }
         }
 
         async function inspectEthWallet() {
             const address = document.getElementById('eth-wallet').value;
-            document.getElementById('eth-wallet-result').textContent = '⏳ Loading...';
-            const data = await fetchAPI('/api/ethereum/wallet', { address });
-            displayResult('eth-wallet-result', data);
+            const resultDiv = document.getElementById('eth-wallet-result');
+            resultDiv.textContent = '⏳ Loading...';
+            try {
+                const data = await fetchAPI('/api/ethereum/wallet', { address });
+                displayResult('eth-wallet-result', data);
+            } catch (e) {
+                resultDiv.textContent = `❌ Error: ${e.message}`;
+            }
         }
 
         async function inspectEthContract() {
             const address = document.getElementById('eth-contract').value;
-            document.getElementById('eth-contract-result').textContent = '⏳ Loading...';
-            const data = await fetchAPI('/api/ethereum/contract', { address });
-            displayResult('eth-contract-result', data);
+            const resultDiv = document.getElementById('eth-contract-result');
+            resultDiv.textContent = '⏳ Loading...';
+            try {
+                const data = await fetchAPI('/api/ethereum/contract', { address });
+                displayResult('eth-contract-result', data);
+            } catch (e) {
+                resultDiv.textContent = `❌ Error: ${e.message}`;
+            }
         }
 
         async function inspectEthToken() {
             const address = document.getElementById('eth-token').value;
-            document.getElementById('eth-token-result').textContent = '⏳ Loading...';
-            const data = await fetchAPI('/api/ethereum/token', { address });
-            displayResult('eth-token-result', data);
+            const resultDiv = document.getElementById('eth-token-result');
+            resultDiv.textContent = '⏳ Loading...';
+            try {
+                const data = await fetchAPI('/api/ethereum/token', { address });
+                displayResult('eth-token-result', data);
+            } catch (e) {
+                resultDiv.textContent = `❌ Error: ${e.message}`;
+            }
         }
 
         async function exploreEthBlock() {
             const block = document.getElementById('eth-block').value;
-            document.getElementById('eth-block-result').textContent = '⏳ Loading...';
-            const data = await fetchAPI('/api/ethereum/block', { block });
-            displayResult('eth-block-result', data);
+            const resultDiv = document.getElementById('eth-block-result');
+            resultDiv.textContent = '⏳ Loading...';
+            try {
+                const data = await fetchAPI('/api/ethereum/block', { block });
+                displayResult('eth-block-result', data);
+            } catch (e) {
+                resultDiv.textContent = `❌ Error: ${e.message}`;
+            }
         }
 
         async function analyzeEthTx() {
             const tx_hash = document.getElementById('eth-tx').value;
+            const resultDiv = document.getElementById('eth-tx-result');
             if (!tx_hash) {
-                document.getElementById('eth-tx-result').textContent = '❌ Please enter a transaction hash';
+                resultDiv.textContent = '❌ Please enter a transaction hash';
                 return;
             }
-            document.getElementById('eth-tx-result').textContent = '⏳ Loading...';
-            const data = await fetchAPI('/api/ethereum/transaction', { tx_hash });
-            displayResult('eth-tx-result', data);
+            resultDiv.textContent = '⏳ Loading...';
+            try {
+                const data = await fetchAPI('/api/ethereum/transaction', { tx_hash });
+                displayResult('eth-tx-result', data);
+            } catch (e) {
+                resultDiv.textContent = `❌ Error: ${e.message}`;
+            }
         }
 
         async function validateNode() {
-            document.getElementById('eth-node-result').textContent = '⏳ Loading...';
+            const resultDiv = document.getElementById('eth-node-result');
+            resultDiv.textContent = '⏳ Loading...';
             try {
                 const response = await fetch('/api/ethereum/node/validate', {
                     method: 'POST',
@@ -283,20 +312,33 @@
                     body: JSON.stringify({})
                 });
                 const data = await response.json();
-                displayResult('eth-node-result', data);
+                if (data && data.error) {
+                    resultDiv.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+                } else if (data) {
+                    resultDiv.innerHTML = `<span class="success">✅ Success</span>\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.textContent = '❌ No data returned';
+                }
             } catch (e) {
-                document.getElementById('eth-node-result').textContent = `❌ Error: ${e.message}`;
+                resultDiv.textContent = `❌ Error: ${e.message}`;
             }
         }
 
         async function getEthGas() {
-            document.getElementById('eth-gas-result').textContent = '⏳ Loading...';
+            const resultDiv = document.getElementById('eth-gas-result');
+            resultDiv.textContent = '⏳ Loading...';
             try {
                 const response = await fetch('/api/ethereum/gas');
                 const data = await response.json();
-                displayResult('eth-gas-result', data);
+                if (data && data.error) {
+                    resultDiv.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+                } else if (data) {
+                    resultDiv.innerHTML = `<span class="success">✅ Success</span>\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.textContent = '❌ No data returned';
+                }
             } catch (e) {
-                document.getElementById('eth-gas-result').textContent = `❌ Error: ${e.message}`;
+                resultDiv.textContent = `❌ Error: ${e.message}`;
             }
         }
     </script>

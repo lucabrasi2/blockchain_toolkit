@@ -1,22 +1,27 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Module:
-    Gas Display
+Module
+------
+core.display.gas_display
 
-Purpose:
-    Display Ethereum gas information
-    for the Universal Blockchain Platform (UBP).
+Purpose
+-------
+Gas price display formatter.
 
-Responsibilities:
-    • Display current gas prices
-    • Display gas cost estimates
-    • Display gas recommendations
-    • Format gas data for user-friendly output
+Author
+------
+Jaramogi Diddy
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
 
 from typing import Dict, Any
@@ -24,90 +29,144 @@ from typing import Dict, Any
 from core.display.utils import (
     print_header,
     print_section,
+    print_bold,
     print_success,
     print_info,
+    print_warning,
+    print_divider,
 )
 
 
 class GasDisplay:
     """
-    Ethereum gas report display formatter.
+    Gas price display formatter.
     """
 
     @staticmethod
-    def display_gas_info(report: Dict[str, Any]) -> None:
+    def display_gas_info(gas_info: Dict[str, Any]) -> None:
         """
-        Display current gas price information.
-        """
-        if report.get("error"):
-            print_info(f"Error: {report.get('error')}")
-            return
+        Display gas price information.
 
-        print_header("⛽ CURRENT GAS PRICE", "=", 60)
+        Parameters
+        ----------
+        gas_info : dict
+            Gas price information.
+        """
+        print_header("⛽ GAS PRICE REPORT", "=", 60)
+
+        # Get values
+        wei = gas_info.get('wei', 0)
+        gwei = gas_info.get('gwei', 0)
+        eth = gas_info.get('eth', 0)
 
         print_section("📌 Gas Information", "-", 40)
 
-        wei = report.get("wei", "N/A")
-        if isinstance(wei, (int, float)):
-            wei = f"{wei:,}"
+        # Wei (with commas for readability)
+        print(f"  Gas Price (Wei):  {wei:,.0f}")
 
-        print(f"  Gas Price (Wei):   {wei}")
-        print(f"  Gas Price (Gwei):  {report.get('gwei', 'N/A')}")
-        print(f"  Gas Price (ETH):   {report.get('eth', 'N/A')}")
+        # Gwei (with 4 decimal places for accuracy)
+        print(f"  Gas Price (Gwei): {gwei:.4f}")
+
+        # ETH (with 12 decimal places for accuracy)
+        print(f"  Gas Price (ETH):  {eth:.12f}")
+
+        # Status indicator
+        if gwei < 1:
+            print_info("  💡 Gas price is very low - excellent time to transact!")
+        elif gwei < 10:
+            print_info("  💡 Gas price is low - good time to transact!")
+        elif gwei < 30:
+            print_info("  📊 Gas price is average")
+        elif gwei < 60:
+            print_warning("  ⚠️  Gas price is elevated")
+        else:
+            print_warning("  🔥 Gas price is high - consider waiting")
+
         print()
 
-        print_success("Gas information retrieved successfully!")
+        # Show Gwei in a more readable format
+        print_section("📊 Quick Reference", "-", 40)
+        print(f"  Current Gwei:     {gwei:.4f} Gwei")
+        print(f"  In Wei:           {wei:,}")
+        print(f"  USD Estimate:     ${gas_info.get('usd_estimate', 0):.4f} (approx)")
+
+        print()
+        print_success("✅ Gas price information displayed successfully!")
 
     @staticmethod
-    def display_gas_estimate(report: Dict[str, Any]) -> None:
+    def display_gas_estimate(estimate: Dict[str, Any]) -> None:
         """
-        Display estimated gas cost.
-        """
-        if report.get("error"):
-            print_info(f"Error: {report.get('error')}")
-            return
+        Display gas cost estimate.
 
+        Parameters
+        ----------
+        estimate : dict
+            Gas cost estimate.
+        """
         print_header("⛽ GAS COST ESTIMATE", "=", 60)
 
-        print_section("📌 Estimate", "-", 40)
+        print_section("📊 Estimate Details", "-", 40)
+        print(f"  Gas Limit:       {estimate.get('gas_limit', 0):,}")
+        print(f"  Gas Price:       {estimate.get('gas_price_gwei', 0):.4f} Gwei")
+        print(f"  Total Cost:      {estimate.get('total_cost_eth', 0):.12f} ETH")
+        print(f"  Cost (USD):      ${estimate.get('total_cost_usd', 0):.4f}")
 
-        gas_limit = report.get("gas_limit", "N/A")
-        if isinstance(gas_limit, int):
-            gas_limit = f"{gas_limit:,}"
-
-        total_cost_wei = report.get("total_cost_wei", "N/A")
-        if isinstance(total_cost_wei, (int, float)):
-            total_cost_wei = f"{int(total_cost_wei):,}"
-
-        print(f"  Gas Limit:         {gas_limit}")
-        print(f"  Gas Price (Gwei):  {report.get('gas_price_gwei', 'N/A')}")
-        print(f"  Total Cost (Wei):  {total_cost_wei}")
-        print(f"  Total Cost (ETH):  {report.get('total_cost_eth', 'N/A')}")
-        print(f"  Total Cost (USD):  ${report.get('total_cost_usd', 'N/A')}")
         print()
-
-        print_success("Gas cost estimate generated successfully!")
+        print_success("✅ Gas estimate completed successfully!")
 
     @staticmethod
-    def display_gas_recommendation(report: Dict[str, Any]) -> None:
+    def display_optimal_gas(recommendation: Dict[str, Any]) -> None:
         """
-        Display optimal gas recommendation.
+        Display optimal gas price recommendations.
+
+        Parameters
+        ----------
+        recommendation : dict
+            Gas price recommendations.
         """
-        if report.get("error"):
-            print_info(f"Error: {report.get('error')}")
-            return
+        print_header("⛽ OPTIMAL GAS PRICE", "=", 60)
 
-        print_header("⛽ GAS RECOMMENDATION", "=", 60)
+        print_section("📊 Recommendations", "-", 40)
+        print(f"  Urgency:         {recommendation.get('urgency', 'standard').upper()}")
 
-        print_section("📊 Recommendation", "-", 40)
+        current = recommendation.get('current_gwei', 0)
+        recommended = recommendation.get('recommended_gwei', 0)
 
-        print(f"  Urgency:           {report.get('urgency', 'Standard').title()}")
-        print(f"  Current Gas:       {report.get('current_gwei', 'N/A')} Gwei")
-        print(f"  Recommended Gas:   {report.get('recommended_gwei', 'N/A')} Gwei")
-        print(f"  Estimated Time:    {report.get('estimated_time', 'Unknown')}")
+        print(f"  Current Price:   {current:.4f} Gwei")
+        print(f"  Recommended:     {recommended:.4f} Gwei")
+
+        if recommended < current:
+            print_info(f"  💡 Save {current - recommended:.4f} Gwei by waiting")
+        elif recommended > current:
+            print_warning(f"  ⚠️  Pay {recommended - current:.4f} Gwei extra for speed")
+
+        print(f"  Est. Time:       {recommendation.get('estimated_time', 'unknown')}")
+
         print()
+        print_info("💡 Tip: Standard urgency is usually best for most transactions")
+        print_success("✅ Optimal gas recommendations displayed!")
 
-        print_success("Gas recommendation generated successfully!")
+    @staticmethod
+    def display_gas_summary(optimizer) -> None:
+        """
+        Display a complete gas summary.
+
+        Parameters
+        ----------
+        optimizer : GasOptimizer
+            Gas optimizer instance.
+        """
+        gas_info = optimizer.get_gas_price()
+        GasDisplay.display_gas_info(gas_info)
+
+        # Show estimates for different urgencies
+        print_section("⏱️  Speed vs Cost", "-", 40)
+        for urgency in ["slow", "standard", "fast", "instant"]:
+            rec = optimizer.get_optimal_gas_price(urgency)
+            print(f"  {urgency.title()}: {rec['recommended_gwei']:.4f} Gwei → {rec['estimated_time']}")
+
+        print()
+        print_success("✅ Gas optimization complete!")
 
 
 ###############################################################################

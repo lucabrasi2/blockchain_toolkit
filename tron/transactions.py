@@ -70,15 +70,33 @@ def get_transaction(tx_hash: str) -> Dict[str, Any]:
 
         contract = data.get("raw_data", {}).get("contract", [{}])[0]
         value = contract.get("parameter", {}).get("value", {})
-
         return {
-            "hash": tx_hash,
-            "block_number": data.get("blockNumber"),
-            "from": value.get("owner_address"),
-            "to": value.get("to_address"),
-            "amount": value.get("amount"),
-            "status": data.get("status"),
-        }
+    "blockchain": "tron",
+
+    "hash": tx_hash,
+
+    "block_number": data.get("blockNumber"),
+
+    "from": value.get("owner_address"),
+
+    "to": value.get("to_address"),
+
+    # TransactionDisplay expects "value"
+    "value": value.get("amount", 0),
+
+    # Keep amount for future TRON-specific reports
+    "amount": value.get("amount", 0),
+
+    # TransactionDisplay expects this field
+    "is_success": data.get("ret", [{}])[0].get("contractRet") == "SUCCESS",
+
+    "status": data.get("ret", [{}])[0].get("contractRet", "UNKNOWN"),
+
+    # Placeholders until we implement receipt parsing
+    "gas_used": None,
+    "gas_price": None,
+    "nonce": None,
+}
     except Exception as error:
       logger.exception(f"Error getting TRON transaction: {tx_hash}")
 

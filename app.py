@@ -14,7 +14,7 @@ Project: Universal Blockchain Platform (UBP)
 Version: 2.0.0
 """
 from database import get_db_manager
-from core.core.bootstrap import bootstrap
+from core.bootstrap import bootstrap
 
 # Initialize database
 db = get_db_manager()

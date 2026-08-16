@@ -10,8 +10,12 @@ Purpose
 -------
 Ethereum gas price optimization service.
 
-This service provides gas price analysis, estimation,
-and optimization recommendations.
+Responsibilities
+----------------
+• Retrieve current gas prices
+• Generate gas optimization reports
+• Estimate transaction costs
+• Recommend optimal gas prices
 
 Author
 ------
@@ -27,7 +31,9 @@ Version
 ===============================================================================
 """
 
-from typing import Dict, Any, Optional
+from __future__ import annotations
+
+from typing import Any
 
 from core.logger import get_logger
 from ethereum.gas import get_gas_optimizer
@@ -37,48 +43,258 @@ logger = get_logger(__name__)
 
 class GasService:
     """
-    Gas price optimization service.
+    Ethereum gas price optimization service.
     """
 
-    def __init__(self):
-        """Initialize the Gas Service."""
-        self.optimizer = get_gas_optimizer()
-        logger.info("GasService initialized.")
+    ###########################################################################
+    # Construction
+    ###########################################################################
 
-    def get_gas_report(self) -> Dict[str, Any]:
+    def __init__(self) -> None:
         """
-        Get a complete gas report.
+        Initialize the Gas Service.
+        """
+
+        self.optimizer = get_gas_optimizer()
+
+        logger.info(
+            "GasService initialized."
+        )
+
+    ###########################################################################
+    # Gas Report
+    ###########################################################################
+
+    def get_gas_report(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Generate a complete gas report.
 
         Returns
         -------
-        Dict[str, Any]
-            Gas report.
+        dict[str, Any]
+            Gas analysis report.
         """
-        logger.info("Generating gas report")
 
-        return {
-            "current": self.optimizer.get_gas_price(),
-            "recommendations": {
-                "slow": self.optimizer.get_optimal_gas_price("slow"),
-                "standard": self.optimizer.get_optimal_gas_price("standard"),
-                "fast": self.optimizer.get_optimal_gas_price("fast"),
-                "instant": self.optimizer.get_optimal_gas_price("instant"),
-            },
-            "estimate_standard": self.optimizer.estimate_gas_cost(),
-            "estimate_fast": self.optimizer.estimate_gas_cost(gas_price_gwei=50),
-        }
+        logger.info(
+            "Generating gas report."
+        )
 
-    def get_gas_price(self) -> Dict[str, Any]:
-        """Get current gas price."""
-        return self.optimizer.get_gas_price()
+        try:
 
-    def estimate_gas_cost(self, gas_limit: int = 21000, gas_price_gwei: Optional[float] = None) -> Dict[str, Any]:
-        """Estimate gas cost."""
-        return self.optimizer.estimate_gas_cost(gas_limit, gas_price_gwei)
+            report: dict[str, Any] = {
 
-    def get_optimal_gas_price(self, urgency: str = "standard") -> Dict[str, Any]:
-        """Get optimal gas price."""
-        return self.optimizer.get_optimal_gas_price(urgency)
+                "current": (
+                    self.optimizer.get_gas_price()
+                ),
+
+                "recommendations": {
+
+                    "slow": (
+                        self.optimizer
+                        .get_optimal_gas_price(
+                            "slow",
+                        )
+                    ),
+
+                    "standard": (
+                        self.optimizer
+                        .get_optimal_gas_price(
+                            "standard",
+                        )
+                    ),
+
+                    "fast": (
+                        self.optimizer
+                        .get_optimal_gas_price(
+                            "fast",
+                        )
+                    ),
+
+                    "instant": (
+                        self.optimizer
+                        .get_optimal_gas_price(
+                            "instant",
+                        )
+                    ),
+                },
+
+                "estimate_standard": (
+                    self.optimizer
+                    .estimate_gas_cost()
+                ),
+
+                "estimate_fast": (
+                    self.optimizer
+                    .estimate_gas_cost(
+                        gas_price_gwei=50,
+                    )
+                ),
+            }
+
+            logger.info(
+                "Gas report generated successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Failed to generate gas report."
+            )
+
+            raise
+
+
+###############################################################################
+# End of Part 1
+###############################################################################
+    ###########################################################################
+    # Current Gas Price
+    ###########################################################################
+
+    def get_gas_price(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Retrieve the current gas price.
+
+        Returns
+        -------
+        dict[str, Any]
+            Current gas price information.
+        """
+
+        logger.info(
+            "Retrieving current gas price."
+        )
+
+        try:
+
+            result = (
+                self.optimizer.get_gas_price()
+            )
+
+            logger.info(
+                "Current gas price retrieved successfully."
+            )
+
+            return result
+
+        except Exception:
+
+            logger.exception(
+                "Failed to retrieve current gas price."
+            )
+
+            raise
+
+    ###########################################################################
+    # Gas Cost Estimation
+    ###########################################################################
+
+    def estimate_gas_cost(
+        self,
+        gas_limit: int = 21_000,
+        gas_price_gwei: float | None = None,
+    ) -> dict[str, Any]:
+        """
+        Estimate transaction gas cost.
+
+        Parameters
+        ----------
+        gas_limit : int
+            Transaction gas limit.
+
+        gas_price_gwei : float | None
+            Optional gas price override.
+
+        Returns
+        -------
+        dict[str, Any]
+            Gas estimation.
+        """
+
+        logger.info(
+            "Estimating gas cost."
+        )
+
+        try:
+
+            result = (
+                self.optimizer.estimate_gas_cost(
+                    gas_limit=gas_limit,
+                    gas_price_gwei=gas_price_gwei,
+                )
+            )
+
+            logger.info(
+                "Gas cost estimated successfully."
+            )
+
+            return result
+
+        except Exception:
+
+            logger.exception(
+                "Failed to estimate gas cost."
+            )
+
+            raise
+
+    ###########################################################################
+    # Optimal Gas Price
+    ###########################################################################
+
+    def get_optimal_gas_price(
+        self,
+        urgency: str = "standard",
+    ) -> dict[str, Any]:
+        """
+        Retrieve the recommended gas price.
+
+        Parameters
+        ----------
+        urgency : str
+            Transaction urgency.
+
+        Returns
+        -------
+        dict[str, Any]
+            Recommended gas price.
+        """
+
+        logger.info(
+            "Retrieving optimal gas price "
+            "for urgency '%s'.",
+            urgency,
+        )
+
+        try:
+
+            result = (
+                self.optimizer.get_optimal_gas_price(
+                    urgency,
+                )
+            )
+
+            logger.info(
+                "Optimal gas price retrieved successfully."
+            )
+
+            return result
+
+        except Exception:
+
+            logger.exception(
+                "Failed to retrieve optimal gas price "
+                "for urgency '%s'.",
+                urgency,
+            )
+
+            raise
 
 
 ###############################################################################

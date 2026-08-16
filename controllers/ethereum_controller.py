@@ -1,62 +1,138 @@
 """
-===============================================================================
 Universal Blockchain Platform (UBP)
 
-Module
-------
+## Module
+
 controllers.ethereum_controller
 
-Purpose
--------
-Ethereum controller for handling blockchain operations.
+## Purpose
 
-Author
-------
+Ethereum controller for coordinating Ethereum
+blockchain operations.
+
+## Architecture Layer
+
+Controller
+
+## Responsibilities
+
+• Coordinate Ethereum user requests
+• Delegate business logic to services
+• Log controller operations
+• Return inspection reports
+
+## Not Responsible For
+
+• Blockchain communication
+• Business logic
+• Report formatting
+• Data persistence
+
+## Author
+
 Jaramogi Diddy
 
-Project
--------
+## Project
+
 Universal Blockchain Platform (UBP)
 
-Version
--------
+## Version
+
 2.0 Enterprise
-===============================================================================
 """
 
-from typing import Dict, Any, Optional
+from __future__ import annotations
+
+from typing import Any
 
 from core.logger import get_logger
-from services.ethereum.wallet_service import WalletService
-from services.ethereum.contract_service import ContractService
-from services.ethereum.token_service import TokenService
-from services.ethereum.block_service import BlockService
-from services.ethereum.transaction_service import TransactionService
-from services.ethereum.node_service import NodeService
-from services.ethereum.gas_service import GasService
+
+from services.ethereum.block_service import (
+    BlockService,
+)
+
+from services.ethereum.contract_service import (
+    ContractService,
+)
+
+from services.ethereum.gas_service import (
+    GasService,
+)
+
+from services.ethereum.network_service import (
+    NetworkService,
+)
+
+from services.ethereum.node_service import (
+    NodeService,
+)
+
+from services.ethereum.token_service import (
+    TokenService,
+)
+
+from services.ethereum.transaction_service import (
+    TransactionService,
+)
+
+from services.ethereum.wallet_service import (
+    WalletService,
+)
+
 
 logger = get_logger(__name__)
 
 
 class EthereumController:
     """
-    Ethereum Controller for handling blockchain interactions.
+    Controller responsible for Ethereum-related operations.
+
+    The controller coordinates user requests and
+    delegates all business logic to the appropriate
+    service layer.
     """
 
-    def __init__(self):
-        """Initialize the Ethereum Controller."""
-        self.wallet_service = WalletService()
-        self.contract_service = ContractService()
-        self.token_service = TokenService()
-        self.block_service = BlockService()
-        self.transaction_service = TransactionService()
-        self.node_service = NodeService()
-        self.gas_service = GasService()
-        logger.info("EthereumController initialized.")
+    ###########################################################################
+    # Construction
+    ###########################################################################
 
-    def wallet_inspector(self, address: str) -> Dict[str, Any]:
+    def __init__(self) -> None:
         """
-        Inspect a wallet address.
+        Initialize Ethereum services.
+        """
+
+        self.wallet_service = WalletService()
+
+        self.contract_service = ContractService()
+
+        self.token_service = TokenService()
+
+        self.block_service = BlockService()
+
+        self.transaction_service = (
+            TransactionService()
+        )
+
+        self.node_service = NodeService()
+
+        self.gas_service = GasService()
+
+        self.network_service = NetworkService()
+
+        logger.info(
+            "EthereumController initialized."
+        )
+
+    ###########################################################################
+    # Wallet Operations
+    ###########################################################################
+
+    def wallet_inspector(
+        self,
+        address: str,
+    ) -> dict[str, Any]:
+        """
+        Inspect an Ethereum wallet.
 
         Parameters
         ----------
@@ -65,21 +141,49 @@ class EthereumController:
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Wallet inspection report.
         """
+
         try:
-            logger.info(f"Inspecting wallet: {address}")
-            report = self.wallet_service.get_wallet_report(address)
-            logger.info("Wallet inspection completed successfully.")
+
+            logger.info(
+                "Inspecting Ethereum wallet: %s",
+                address,
+            )
+
+            report = (
+                self.wallet_service
+                .get_wallet_report(
+                    address,
+                )
+            )
+
+            logger.info(
+                "Ethereum wallet inspection "
+                "completed successfully."
+            )
+
             return report
-        except Exception as error:
-            logger.error(f"Unexpected wallet inspector error: {error}")
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum wallet inspection failed."
+            )
+
             raise
 
-    def contract_inspector(self, address: str) -> Dict[str, Any]:
+    ###########################################################################
+    # Contract Operations
+    ###########################################################################
+
+    def contract_inspector(
+        self,
+        address: str,
+    ) -> dict[str, Any]:
         """
-        Inspect a contract address.
+        Inspect an Ethereum smart contract.
 
         Parameters
         ----------
@@ -88,155 +192,384 @@ class EthereumController:
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Contract inspection report.
         """
+
         try:
-            logger.info(f"Inspecting contract: {address}")
-            report = self.contract_service.get_contract_report(address)
-            logger.info("Contract inspection completed successfully.")
+
+            logger.info(
+                "Inspecting Ethereum contract: %s",
+                address,
+            )
+
+            report = (
+                self.contract_service
+                .get_contract_report(
+                    address,
+                )
+            )
+
+            logger.info(
+                "Ethereum contract inspection "
+                "completed successfully."
+            )
+
             return report
-        except Exception as error:
-            logger.error(f"Unexpected contract inspector error: {error}")
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum contract inspection failed."
+            )
+
             raise
 
-    def token_inspector(self, address: str) -> Dict[str, Any]:
+    ###########################################################################
+    # Token Operations
+    ###########################################################################
+
+    def token_inspector(
+        self,
+        address: str,
+    ) -> dict[str, Any]:
         """
-        Inspect a token address.
+        Inspect an ERC-20 token.
 
         Parameters
         ----------
         address : str
-            Ethereum token address.
+            ERC-20 token contract address.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Token inspection report.
         """
-        try:
-            logger.info(f"Inspecting token: {address}")
-            report = self.token_service.get_token_report(address)
-            logger.info("Token inspection completed successfully.")
-            return report
-        except Exception as error:
-            logger.error(f"Unexpected token inspector error: {error}")
-            raise
 
-    def block_explorer(self, block_identifier) -> Dict[str, Any]:
+        try:
+
+            logger.info(
+                "Inspecting Ethereum token: %s",
+                address,
+            )
+
+            report = (
+                self.token_service
+                .get_token_report(
+                    address,
+                )
+            )
+
+            logger.info(
+                "Ethereum token inspection "
+                "completed successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum token inspection failed."
+            )
+
+            raise
+        ###########################################################################
+    # Block Operations
+    ###########################################################################
+
+    def block_explorer(
+        self,
+        block_identifier: str | int,
+    ) -> dict[str, Any]:
         """
-        Explore a block.
+        Explore an Ethereum block.
 
         Parameters
         ----------
-        block_identifier : int or str
-            Block number or 'latest'.
+        block_identifier : str | int
+            Block number, block hash,
+            or "latest".
 
         Returns
         -------
-        Dict[str, Any]
-            Block exploration report.
+        dict[str, Any]
+            Block inspection report.
         """
+
         try:
-            logger.info(f"Exploring block: {block_identifier}")
-            report = self.block_service.get_block_report(block_identifier)
-            logger.info("Block exploration completed successfully.")
+
+            logger.info(
+                "Exploring Ethereum block: %s",
+                block_identifier,
+            )
+
+            report = (
+                self.block_service
+                .get_block_report(
+                    block_identifier,
+                )
+            )
+
+            logger.info(
+                "Ethereum block exploration "
+                "completed successfully."
+            )
+
             return report
-        except Exception as error:
-            logger.error(f"Unexpected block explorer error: {error}")
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum block exploration failed."
+            )
+
             raise
 
-    def transaction_analyzer(self, tx_hash: str) -> Dict[str, Any]:
+    ###########################################################################
+    # Transaction Operations
+    ###########################################################################
+
+    def transaction_analyzer(
+        self,
+        tx_hash: str,
+    ) -> dict[str, Any]:
         """
-        Analyze a transaction.
+        Analyze an Ethereum transaction.
 
         Parameters
         ----------
         tx_hash : str
-            Transaction hash.
+            Ethereum transaction hash.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Transaction analysis report.
         """
+
         try:
-            logger.info(f"Analyzing transaction: {tx_hash}")
-            report = self.transaction_service.get_transaction_report(tx_hash)
-            logger.info("Transaction analysis completed successfully.")
+
+            logger.info(
+                "Analyzing Ethereum transaction: %s",
+                tx_hash,
+            )
+
+            report = (
+                self.transaction_service
+                .get_transaction_report(
+                    tx_hash,
+                )
+            )
+
+            logger.info(
+                "Ethereum transaction analysis "
+                "completed successfully."
+            )
+
             return report
-        except Exception as error:
-            logger.error(f"Unexpected transaction analyzer error: {error}")
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum transaction analysis failed."
+            )
+
             raise
 
-    def node_validator(self, rpc_url: Optional[str] = None) -> Dict[str, Any]:
+    ###########################################################################
+    # Node Operations
+    ###########################################################################
+
+    def node_validator(
+        self,
+        rpc_url: str | None = None,
+    ) -> dict[str, Any]:
         """
-        Validate a blockchain node.
+        Validate an Ethereum node.
 
         Parameters
         ----------
-        rpc_url : str, optional
-            RPC URL to validate.
+        rpc_url : str | None
+            Optional RPC endpoint.
+
+            If omitted, the currently configured
+            node is validated.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Node validation report.
         """
+
         try:
-            logger.info(f"Validating node: {rpc_url or 'default'}")
-            if rpc_url:
-                report = self.node_service.validate_node(rpc_url)
+
+            logger.info(
+                "Validating Ethereum node: %s",
+                rpc_url or "default",
+            )
+
+            if rpc_url is None:
+
+                report = (
+                    self.node_service
+                    .validate_current_node()
+                )
+
             else:
-                report = self.node_service.validate_current_node()
-            logger.info("Node validation completed successfully.")
+
+                report = (
+                    self.node_service
+                    .validate_node(
+                        rpc_url,
+                    )
+                )
+
+            logger.info(
+                "Ethereum node validation "
+                "completed successfully."
+            )
+
             return report
-        except Exception as error:
-            logger.error(f"Unexpected node validator error: {error}")
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum node validation failed."
+            )
+
             raise
 
-    def compare_nodes(self, node_urls: list) -> Dict[str, Any]:
+    def compare_nodes(
+        self,
+        node_urls: list[str],
+    ) -> dict[str, Any]:
         """
-        Compare multiple blockchain nodes.
+        Compare multiple Ethereum nodes.
 
         Parameters
         ----------
-        node_urls : list
-            List of node RPC URLs to compare.
+        node_urls : list[str]
+            RPC endpoints to compare.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Node comparison report.
         """
+
         try:
-            logger.info(f"Comparing {len(node_urls)} nodes")
-            report = self.node_service.compare_nodes(node_urls)
-            logger.info("Node comparison completed successfully.")
+
+            logger.info(
+                "Comparing %d Ethereum nodes.",
+                len(node_urls),
+            )
+
+            report = (
+                self.node_service
+                .compare_nodes(
+                    node_urls,
+                )
+            )
+
+            logger.info(
+                "Ethereum node comparison "
+                "completed successfully."
+            )
+
             return report
-        except Exception as error:
-            logger.error(f"Unexpected node comparison error: {error}")
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum node comparison failed."
+            )
+
             raise
 
-    def gas_optimizer(self) -> Dict[str, Any]:
+    ###########################################################################
+    # Gas Operations
+    ###########################################################################
+
+    def gas_optimizer(
+        self,
+    ) -> dict[str, Any]:
         """
-        Get gas price optimization report.
+        Retrieve the current Ethereum gas
+        optimization report.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Gas optimization report.
         """
+
         try:
-            logger.info("Getting gas optimization report")
-            report = self.gas_service.get_gas_report()
-            logger.info("Gas optimization completed successfully.")
+
+            logger.info(
+                "Retrieving Ethereum gas "
+                "optimization report."
+            )
+
+            report = (
+                self.gas_service
+                .get_gas_report()
+            )
+
+            logger.info(
+                "Ethereum gas optimization "
+                "completed successfully."
+            )
+
             return report
-        except Exception as error:
-            logger.error(f"Unexpected gas optimizer error: {error}")
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum gas optimization failed."
+            )
+
             raise
 
+    ###########################################################################
+    # Network Operations
+    ###########################################################################
 
-###############################################################################
-# End of File
-###############################################################################
+    def network_inspector(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Inspect Ethereum network information.
+
+        Returns
+        -------
+        dict[str, Any]
+            Ethereum network report.
+        """
+
+        try:
+
+            logger.info(
+                "Inspecting Ethereum network."
+            )
+
+            report = (
+                self.network_service
+                .get_network_report()
+            )
+
+            logger.info(
+                "Ethereum network inspection "
+                "completed successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Ethereum network inspection failed."
+            )
+
+            raise

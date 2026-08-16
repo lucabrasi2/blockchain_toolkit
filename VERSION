@@ -1,0 +1,30 @@
+###############################################################################
+# Universal Blockchain Platform (UBP)
+#
+# Version Information
+#
+# Author:
+#     Jaramogi Diddy
+#
+# Project:
+#     Universal Blockchain Platform (UBP)
+###############################################################################
+
+Version:            2.0.0
+Release Name:       Enterprise
+Release Date:       2026-08-05
+Status:             Production Candidate
+
+Major:              2
+Minor:              0
+Patch:              0
+
+Codename:           Enterprise Genesis
+
+Supported Python:   3.11+
+
+License:            MIT
+
+Maintainer:         Jaramogi Diddy
+
+Repository:         Universal Blockchain Platform (UBP)

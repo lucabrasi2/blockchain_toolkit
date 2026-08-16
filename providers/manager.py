@@ -13,16 +13,16 @@ of blockchain providers.
 
 Responsibilities
 ----------------
-- Provider registration
-- Provider creation
-- Provider activation
-- Default provider management
-- Backup provider management
-- Automatic failover
-- Connection management
-- Health monitoring
-- Runtime statistics
-- Graceful shutdown
+• Provider registration
+• Provider creation
+• Provider activation
+• Default provider management
+• Backup provider management
+• Automatic failover
+• Connection management
+• Health monitoring
+• Runtime statistics
+• Graceful shutdown
 
 Architecture
 ------------
@@ -32,8 +32,8 @@ Author
 ------
 Jaramogi Diddy
 
-Platform
---------
+Project
+-------
 Universal Blockchain Platform (UBP)
 
 Version
@@ -44,13 +44,9 @@ Version
 
 from __future__ import annotations
 
-import logging
-
 from datetime import datetime
 
-from typing import Dict
-from typing import List
-from typing import Optional
+from core.logger import get_logger
 
 from providers.base import BaseProvider
 from providers.config import ProviderConfig
@@ -58,20 +54,20 @@ from providers.factory import ProviderFactory
 from providers.registry import ProviderRegistry
 
 from providers.exceptions import (
+    ProviderAlreadyRegisteredError,
     ProviderError,
     ProviderNotFoundError,
-    ProviderAlreadyRegisteredError,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ProviderManager:
     """
     Enterprise provider manager.
 
-    Responsible for coordinating every provider used by
-    the Universal Blockchain Platform.
+    Coordinates the lifecycle of blockchain providers
+    used throughout the Universal Blockchain Platform.
     """
 
     ###########################################################################
@@ -80,11 +76,26 @@ class ProviderManager:
 
     def __init__(
         self,
-        factory: Optional[ProviderFactory] = None,
-        registry: Optional[ProviderRegistry] = None,
+        factory: ProviderFactory | None = None,
+        registry: ProviderRegistry | None = None,
     ) -> None:
+        """
+        Initialize the provider manager.
 
-        self._registry = registry or ProviderRegistry()
+        Parameters
+        ----------
+        factory : ProviderFactory | None
+            Provider factory.
+
+        registry : ProviderRegistry | None
+            Provider registry.
+        """
+
+        self._registry = (
+            registry
+            if registry is not None
+            else ProviderRegistry()
+        )
 
         self._factory = (
             factory
@@ -92,16 +103,20 @@ class ProviderManager:
             else ProviderFactory(self._registry)
         )
 
-        self._providers: Dict[str, BaseProvider] = {}
+        self._providers: dict[str, BaseProvider] = {}
 
-        self._default_provider: Optional[str] = None
+        self._default_provider: str | None = None
 
-        self._active_provider: Optional[str] = None
+        self._active_provider: str | None = None
 
-        self._backup_provider: Optional[str] = None
+        self._backup_provider: str | None = None
 
         self._failover_enabled = False
 
+        #
+        # Leave utcnow() unchanged for consistency
+        # with the current provider framework.
+        #
         self._created_at = datetime.utcnow()
 
         self._statistics = {
@@ -123,38 +138,65 @@ class ProviderManager:
 
     @property
     def registry(self) -> ProviderRegistry:
+        """
+        Return the provider registry.
+        """
         return self._registry
 
     @property
     def factory(self) -> ProviderFactory:
+        """
+        Return the provider factory.
+        """
         return self._factory
 
     @property
-    def providers(self) -> Dict[str, BaseProvider]:
+    def providers(self) -> dict[str, BaseProvider]:
+        """
+        Return managed providers.
+        """
         return self._providers
 
     @property
-    def provider_names(self) -> List[str]:
+    def provider_names(self) -> list[str]:
+        """
+        Return provider names.
+        """
         return sorted(self._providers.keys())
 
     @property
     def count(self) -> int:
+        """
+        Return the number of managed providers.
+        """
         return len(self._providers)
 
     @property
-    def active_provider_name(self) -> Optional[str]:
+    def active_provider_name(self) -> str | None:
+        """
+        Return the active provider name.
+        """
         return self._active_provider
 
     @property
-    def backup_provider_name(self) -> Optional[str]:
+    def backup_provider_name(self) -> str | None:
+        """
+        Return the backup provider name.
+        """
         return self._backup_provider
 
     @property
-    def default_provider_name(self) -> Optional[str]:
+    def default_provider_name(self) -> str | None:
+        """
+        Return the default provider name.
+        """
         return self._default_provider
 
     @property
     def failover_enabled(self) -> bool:
+        """
+        Return whether automatic failover is enabled.
+        """
         return self._failover_enabled
 
     ###########################################################################
@@ -173,9 +215,10 @@ class ProviderManager:
         Register an already-created provider instance.
         """
 
-        name = name.lower().strip()
+        name = name.strip().lower()
 
         if name in self._providers:
+
             raise ProviderAlreadyRegisteredError(
                 f"Provider '{name}' is already registered."
             )
@@ -194,7 +237,7 @@ class ProviderManager:
             self._backup_provider = name
 
         logger.info(
-            "Registered provider: %s",
+            "Registered provider '%s'.",
             name,
         )
 
@@ -211,6 +254,16 @@ class ProviderManager:
     ) -> BaseProvider:
         """
         Create and register a provider.
+
+        Parameters
+        ----------
+        config : ProviderConfig
+            Provider configuration.
+
+        Returns
+        -------
+        BaseProvider
+            Newly created provider.
         """
 
         provider = self._factory.create(config)
@@ -232,6 +285,9 @@ class ProviderManager:
         self,
         name: str,
     ) -> bool:
+        """
+        Determine whether a provider is managed.
+        """
 
         return name.lower() in self._providers
 
@@ -239,11 +295,15 @@ class ProviderManager:
         self,
         name: str,
     ) -> BaseProvider:
+        """
+        Retrieve a managed provider.
+        """
 
         try:
             return self._providers[name.lower()]
 
         except KeyError as exc:
+
             raise ProviderNotFoundError(
                 f"Provider '{name}' not found."
             ) from exc
@@ -251,25 +311,32 @@ class ProviderManager:
     def get_active_provider(
         self,
     ) -> BaseProvider:
+        """
+        Return the active provider.
+        """
 
         if self._active_provider is None:
+
             raise ProviderError(
                 "No active provider configured."
             )
 
         return self.get_provider(
-            self._active_provider
+            self._active_provider,
         )
 
     def get_backup_provider(
         self,
-    ) -> Optional[BaseProvider]:
+    ) -> BaseProvider | None:
+        """
+        Return the backup provider.
+        """
 
         if self._backup_provider is None:
             return None
 
         return self.get_provider(
-            self._backup_provider
+            self._backup_provider,
         )
         ###########################################################################
     # Provider Activation
@@ -281,6 +348,16 @@ class ProviderManager:
     ) -> BaseProvider:
         """
         Set the active provider.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
+
+        Returns
+        -------
+        BaseProvider
+            Active provider.
         """
 
         provider = self.get_provider(name)
@@ -300,6 +377,16 @@ class ProviderManager:
     ) -> BaseProvider:
         """
         Set the default provider.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
+
+        Returns
+        -------
+        BaseProvider
+            Default provider.
         """
 
         provider = self.get_provider(name)
@@ -319,6 +406,16 @@ class ProviderManager:
     ) -> BaseProvider:
         """
         Set the backup provider.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
+
+        Returns
+        -------
+        BaseProvider
+            Backup provider.
         """
 
         provider = self.get_provider(name)
@@ -338,13 +435,23 @@ class ProviderManager:
     ) -> BaseProvider:
         """
         Switch to another registered provider.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
+
+        Returns
+        -------
+        BaseProvider
+            Newly active provider.
         """
 
         provider = self.set_active_provider(name)
 
         logger.info(
             "Provider switched to '%s'.",
-            name,
+            name.lower(),
         )
 
         return provider
@@ -359,9 +466,14 @@ class ProviderManager:
     ) -> None:
         """
         Remove a provider from management.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
         """
 
-        name = name.lower()
+        name = name.strip().lower()
 
         provider = self.get_provider(name)
 
@@ -395,7 +507,12 @@ class ProviderManager:
         enabled: bool = True,
     ) -> None:
         """
-        Enable automatic provider failover.
+        Enable or disable automatic provider failover.
+
+        Parameters
+        ----------
+        enabled : bool
+            Enable automatic failover.
         """
 
         self._failover_enabled = enabled
@@ -416,9 +533,15 @@ class ProviderManager:
 
     def perform_failover(
         self,
-    ) -> Optional[BaseProvider]:
+    ) -> BaseProvider | None:
         """
         Switch to the configured backup provider.
+
+        Returns
+        -------
+        BaseProvider | None
+            Backup provider if failover succeeds,
+            otherwise None.
         """
 
         if not self._failover_enabled:
@@ -444,7 +567,7 @@ class ProviderManager:
 
         return backup
 
-    ###########################################################################
+       ###########################################################################
     # Health Monitoring
     ###########################################################################
 
@@ -453,7 +576,17 @@ class ProviderManager:
         name: str,
     ) -> bool:
         """
-        Execute a health check for a provider.
+        Execute a health check for a managed provider.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
+
+        Returns
+        -------
+        bool
+            True if the provider is healthy.
         """
 
         provider = self.get_provider(name)
@@ -473,12 +606,17 @@ class ProviderManager:
 
     def health_check_all(
         self,
-    ) -> Dict[str, bool]:
+    ) -> dict[str, bool]:
         """
-        Execute health checks for all providers.
+        Execute health checks for all managed providers.
+
+        Returns
+        -------
+        dict[str, bool]
+            Health status for every provider.
         """
 
-        results: Dict[str, bool] = {}
+        results: dict[str, bool] = {}
 
         for name in self.provider_names:
             results[name] = self.health_check(name)
@@ -494,7 +632,12 @@ class ProviderManager:
         name: str,
     ) -> None:
         """
-        Connect a provider.
+        Connect a managed provider.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
         """
 
         provider = self.get_provider(name)
@@ -511,7 +654,12 @@ class ProviderManager:
         name: str,
     ) -> None:
         """
-        Disconnect a provider.
+        Disconnect a managed provider.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
         """
 
         provider = self.get_provider(name)
@@ -527,7 +675,7 @@ class ProviderManager:
         self,
     ) -> None:
         """
-        Connect all registered providers.
+        Connect every registered provider.
         """
 
         for name in self.provider_names:
@@ -537,12 +685,13 @@ class ProviderManager:
         self,
     ) -> None:
         """
-        Disconnect all registered providers.
+        Disconnect every registered provider.
         """
 
         for name in self.provider_names:
             self.disconnect(name)
-        ###########################################################################
+
+    ###########################################################################
     # Shutdown
     ###########################################################################
 
@@ -562,22 +711,23 @@ class ProviderManager:
         self,
     ) -> None:
         """
-        Gracefully shutdown every registered provider.
+        Gracefully disconnect every registered provider.
         """
 
         logger.info(
-            "Closing all providers..."
+            "Closing all providers."
         )
 
         for name in list(self.provider_names):
+
             try:
                 self.disconnect(name)
 
-            except Exception as error:
+            except Exception:
+
                 logger.exception(
-                    "Failed to close provider '%s': %s",
+                    "Failed to close provider '%s'.",
                     name,
-                    error,
                 )
 
         logger.info(
@@ -590,9 +740,14 @@ class ProviderManager:
 
     def provider_statistics(
         self,
-    ) -> Dict[str, object]:
+    ) -> dict[str, object]:
         """
         Return provider manager statistics.
+
+        Returns
+        -------
+        dict[str, object]
+            Provider manager statistics.
         """
 
         return {
@@ -611,9 +766,14 @@ class ProviderManager:
 
     def list_providers(
         self,
-    ) -> List[str]:
+    ) -> list[str]:
         """
-        Return the registered provider names.
+        Return registered provider names.
+
+        Returns
+        -------
+        list[str]
+            Registered provider names.
         """
 
         return self.provider_names
@@ -639,9 +799,14 @@ class ProviderManager:
 
     def to_dict(
         self,
-    ) -> Dict[str, object]:
+    ) -> dict[str, object]:
         """
         Serialize the provider manager.
+
+        Returns
+        -------
+        dict[str, object]
+            Serialized manager.
         """
 
         return {
@@ -689,7 +854,7 @@ class ProviderManager:
         self,
     ) -> "ProviderManager":
         """
-        Context manager entry.
+        Enter context manager.
         """
 
         return self
@@ -701,7 +866,7 @@ class ProviderManager:
         traceback,
     ) -> None:
         """
-        Context manager exit.
+        Exit context manager.
         """
 
         self.close_all()
@@ -710,7 +875,7 @@ class ProviderManager:
         self,
     ) -> str:
         """
-        Developer-friendly representation.
+        Return a developer-friendly representation.
         """
 
         return (
@@ -721,3 +886,4 @@ class ProviderManager:
             f"backup={self._backup_provider!r}, "
             f"failover={self._failover_enabled})"
         )
+        

@@ -35,6 +35,7 @@ from flask_bcrypt import Bcrypt
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_mail import Mail
+from flask_socketio import join_room, emit
 from datetime import datetime
 from functools import wraps
 
@@ -47,7 +48,7 @@ from core.logger import get_logger
 from web.auth import auth_bp, load_user, get_user_manager, require_api_key, authenticate_api_key
 
 # Import SocketIO
-from web.socketio import socketio, init_socketio
+from web.ws import socketio, init_socketio, start_monitoring
 
 logger = get_logger(__name__)
 
@@ -677,21 +678,32 @@ def handle_subscribe_block(data):
 
 
 # ============ Main Entry Point ============
-
 if __name__ == '__main__':
+    import os
+
     logger.info("=" * 60)
     logger.info("🌐 Universal Blockchain Platform - Web Interface")
     logger.info("=" * 60)
-    logger.info(f"📍 URL: http://0.0.0.0:5000")
-    logger.info(f"📍 Dashboard: http://localhost:5000/dashboard")
-    logger.info(f"📍 History: http://localhost:5000/history")
-    logger.info(f"📍 Login: http://localhost:5000/auth/login")
-    logger.info(f"📍 Register: http://localhost:5000/auth/register")
+    logger.info("📍 URL: http://0.0.0.0:5000")
+    logger.info("📍 Dashboard: http://localhost:5000/dashboard")
+    logger.info("📍 History: http://localhost:5000/history")
+    logger.info("📍 Login: http://localhost:5000/auth/login")
+    logger.info("📍 Register: http://localhost:5000/auth/register")
     logger.info("=" * 60)
-    
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
 
+    # Start monitoring only once.
+    # In Flask debug mode, Werkzeug starts two processes.
+    # This ensures only the child process starts the monitoring threads.
+    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        logger.info("Starting blockchain monitoring...")
+        start_monitoring()
 
+    socketio.run(
+    app,
+    host="0.0.0.0",
+    port=5000,
+    debug=False,
+)
 ###############################################################################
 # End of File
 ###############################################################################

@@ -1,34 +1,42 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Module:
-    Node Validator
+Module
+------
+ethereum.node_validator
 
-Purpose:
-    Validate and confirm blockchain node health,
-    sync status, and network participation.
+Purpose
+-------
+Enterprise node validation for Ethereum networks.
 
-Responsibilities:
-    • Check node connectivity
-    • Verify node sync status
-    • Measure node performance
-    • Detect node type
-    • Compare with network consensus
-    • Generate node health reports
+This module provides comprehensive node health checks,
+performance monitoring, and diagnostics.
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Author
+------
+Jaramogi Diddy
+
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
+
+from __future__ import annotations
 
 import time
 from typing import Dict, Any, Optional, List
 from datetime import datetime
+
 from web3 import Web3
 
 from ethereum.connection import get_connection
 from core.logger import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -100,40 +108,43 @@ class NodeValidator:
     def validate(self) -> Dict[str, Any]:
         """
         Perform full node validation.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Complete node validation report.
         """
         logger.info(f"Starting node validation for: {self.rpc_url or 'default'}")
 
-        # Step 1: Check connectivity
-        self._check_connectivity()
+        # If w3 is already set, use it
+        if self.w3 is not None:
+            self._connected_web3 = self.w3
+            self.result.is_connected = True
+            self.result.response_time_ms = 0
+            logger.info("✅ Using provided Web3 connection")
+        else:
+            # Step 1: Check connectivity
+            self._check_connectivity()
 
         if not self.result.is_connected:
             logger.error("Node validation failed: Not connected")
             return self.result.to_dict()
 
-        # Step 2: Get basic node info
+        # Step 2: Retrieve node information
         self._get_node_info()
 
-        # Step 3: Check sync status
+        # Step 3: Check synchronization status
         self._check_sync_status()
 
-        # Step 4: Check node type
+        # Step 4: Detect node type
         self._detect_node_type()
 
         # Step 5: Measure performance
         self._measure_performance()
 
-        # Step 6: Check peer count
+        # Step 6: Check peer information
         self._check_peers()
 
-        # Step 7: Determine health status
+        # Step 7: Determine overall health
         self._determine_health()
 
-        # Step 8: Generate validation report
+        logger.info("Node validation completed successfully.")
+
         return self.result.to_dict()
 
     def _check_connectivity(self) -> None:
@@ -374,32 +385,58 @@ def compare_nodes(node_urls: List[str]) -> Dict[str, Any]:
         Comparison report.
     """
     logger.info(f"Comparing {len(node_urls)} nodes")
-    
+
     results = []
     latest_blocks = {}
     chain_ids = set()
-    
+
     for url in node_urls:
         try:
+            logger.info(f"Validating node: {url}")
+
             validator = NodeValidator(url)
             result = validator.validate()
+
+            # Always include the RPC URL in the result
+            result["rpc_url"] = url
+
+            # ---------------- DEBUG ----------------
+            logger.info("=" * 70)
+            logger.info(f"Validation Result for {url}")
+            logger.info(result)
+            logger.info("=" * 70)
+            # ---------------------------------------
+
             results.append(result)
-            
-            if result.get("is_connected"):
+
+            if result.get("is_connected", False):
                 latest_blocks[url] = result.get("block_number", 0)
-                chain_ids.add(result.get("chain_id", 0))
+
+                chain_id = result.get("chain_id")
+                if chain_id is not None:
+                    chain_ids.add(chain_id)
+
         except Exception as error:
-            logger.error(f"Error validating node {url}: {error}")
+            logger.exception(f"Error validating node {url}")
+
             results.append({
                 "rpc_url": url,
                 "is_connected": False,
+                "health_status": "Failed",
+                "block_number": 0,
+                "chain_id": None,
                 "error": str(error),
             })
-    
-    # Check consensus
-    all_on_same_chain = len(chain_ids) == 1
-    
-    # Check block height consistency
+
+    # Summary statistics
+    nodes_connected = sum(
+        1 for r in results if r.get("is_connected", False)
+    )
+
+    all_on_same_chain = (
+        len(chain_ids) == 1 and nodes_connected > 0
+    )
+
     if latest_blocks:
         block_heights = list(latest_blocks.values())
         max_block = max(block_heights)
@@ -407,17 +444,24 @@ def compare_nodes(node_urls: List[str]) -> Dict[str, Any]:
         block_diff = max_block - min_block
         is_consistent = block_diff < 10
     else:
-        is_consistent = False
         block_diff = None
-    
+        is_consistent = False
+
     return {
         "nodes_checked": len(node_urls),
-        "nodes_connected": sum(1 for r in results if r.get("is_connected")),
+        "nodes_connected": nodes_connected,
         "same_chain": all_on_same_chain,
         "block_height_consistent": is_consistent,
-        "chain_ids": list(chain_ids),
+        "chain_ids": sorted(chain_ids),
         "latest_blocks": latest_blocks,
         "block_difference": block_diff,
         "results": results,
-        "consensus_status": "✅ Reached" if (all_on_same_chain and is_consistent) else "❌ Not Reached",
+        "consensus_status": (
+            "✅ Reached"
+            if (all_on_same_chain and is_consistent)
+            else "❌ Not Reached"
+        ),
     }
+###############################################################################
+# End of File
+###############################################################################

@@ -2,34 +2,55 @@
 Universal Blockchain Platform (UBP)
 
 Module:
-    TRON Controller
+TRON Controller
 
 Purpose:
-    Handle TRON-related operations and coordinate
-    between the user interface and TRON services.
+Handle TRON-related operations and coordinate
+between the user interface and TRON services.
+
+Architecture:
+
+Controller
+    ↓
+TRON Services
+    ↓
+TRON Blockchain Modules
 
 Responsibilities:
-    • Coordinate TRON services
-    • Delegate business logic
-    • Handle controller-level exceptions
-    • Provide a stable interface for API, CLI and Web UI
+• Coordinate TRON services
+• Delegate business logic
+• Handle controller-level exceptions
+• Provide a stable interface for API, CLI and Web UI
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Not Responsible For:
+• Blockchain communication
+• Blockchain business logic
+• Report formatting
+• Data persistence
+
+Author:
+Jaramogi Diddy
+
+Project:
+Universal Blockchain Platform (UBP)
+
+Version:
+2.0.0
 """
 
-from typing import Dict, Any, Optional
+from __future__ import annotations
+
+from typing import Any
 
 from core.logger import get_logger
-from core.display import print_error
 
-from services.tron.wallet_service import TronWalletService
-from services.tron.contract_service import TronContractService
-from services.tron.token_service import TronTokenService
-
-from tron.blocks import get_block
-from tron.transactions import get_transaction
+from services.tron import (
+    TronBlockService,
+    TronContractService,
+    TronTokenService,
+    TronTransactionService,
+    TronWalletService,
+)
 
 
 logger = get_logger(__name__)
@@ -40,23 +61,52 @@ class TronController:
     Controller responsible for coordinating
     TRON blockchain operations.
 
-    The controller intentionally contains very
-    little business logic. All blockchain-specific
-    operations are delegated to the appropriate
-    service classes.
+    The controller delegates all blockchain
+    and business operations to the appropriate
+    service layer.
     """
 
-    def __init__(self):
+    ###########################################################################
+    # Construction
+    ###########################################################################
+
+    def __init__(self) -> None:
         """
         Initialize TRON services.
         """
-        self.wallet_service = TronWalletService()
-        self.contract_service = TronContractService()
-        self.token_service = TronTokenService()
 
-        logger.info("TronController initialized successfully.")
+        self.wallet_service = (
+            TronWalletService()
+        )
 
-    def wallet_inspector(self, address: str) -> Dict[str, Any]:
+        self.contract_service = (
+            TronContractService()
+        )
+
+        self.token_service = (
+            TronTokenService()
+        )
+
+        self.block_service = (
+            TronBlockService()
+        )
+
+        self.transaction_service = (
+            TronTransactionService()
+        )
+
+        logger.info(
+            "TronController initialized successfully."
+        )
+
+    ###########################################################################
+    # Wallet Operations
+    ###########################################################################
+
+    def wallet_inspector(
+        self,
+        address: str,
+    ) -> dict[str, Any]:
         """
         Inspect a TRON wallet.
 
@@ -67,29 +117,49 @@ class TronController:
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Wallet inspection report.
         """
-        logger.info(f"Inspecting TRON wallet: {address}")
 
         try:
-            return self.wallet_service.get_wallet_report(address)
 
-        except Exception as error:
-            logger.exception(
-                "Unexpected error while inspecting TRON wallet."
+            logger.info(
+                "Inspecting TRON wallet: %s",
+                address,
             )
 
-            print_error(str(error))
+            report = (
+                self.wallet_service
+                .get_wallet_report(
+                    address,
+                )
+            )
 
-            return {
-                "address": address,
-                "error": str(error),
-            }
+            logger.info(
+                "TRON wallet inspection "
+                "completed successfully."
+            )
 
-    def contract_inspector(self, address: str) -> Dict[str, Any]:
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "TRON wallet inspection failed."
+            )
+
+            raise
+
+    ###########################################################################
+    # Contract Operations
+    ###########################################################################
+
+    def contract_inspector(
+        self,
+        address: str,
+    ) -> dict[str, Any]:
         """
-        Inspect a TRON contract.
+        Inspect a TRON smart contract.
 
         Parameters
         ----------
@@ -98,124 +168,290 @@ class TronController:
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Contract inspection report.
         """
-        logger.info(f"Inspecting TRON contract: {address}")
 
         try:
-            return self.contract_service.get_contract_report(address)
 
-        except Exception as error:
-            logger.exception(
-                "Unexpected error while inspecting TRON contract."
+            logger.info(
+                "Inspecting TRON contract: %s",
+                address,
             )
 
-            print_error(str(error))
+            report = (
+                self.contract_service
+                .get_contract_report(
+                    address,
+                )
+            )
 
-            return {
-                "address": address,
-                "error": str(error),
-            }
+            logger.info(
+                "TRON contract inspection "
+                "completed successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "TRON contract inspection failed."
+            )
+
+            raise
+
+    ###########################################################################
+    # Token Operations
+    ###########################################################################
 
     def token_inspector(
         self,
         address: str,
-        wallet_address: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        wallet_address: str | None = None,
+    ) -> dict[str, Any]:
         """
         Inspect a TRC-20 token.
 
         Parameters
         ----------
         address : str
-            Token contract address.
-        wallet_address : str, optional
-            Wallet address for balance lookup.
+            TRC-20 token contract address.
+
+        wallet_address : str | None
+            Optional TRON wallet address used
+            for token balance inspection.
 
         Returns
         -------
-        Dict[str, Any]
-            Token inspection report.
+        dict[str, Any]
+            TRC-20 token inspection report.
         """
-        logger.info(f"Inspecting TRON token: {address}")
 
         try:
-            return self.token_service.get_token_report(
-                address=address,
-                wallet_address=wallet_address,
+
+            logger.info(
+                "Inspecting TRON token: %s",
+                address,
             )
 
-        except Exception as error:
+            report = (
+                self.token_service
+                .get_token_report(
+                    address=address,
+                    wallet_address=wallet_address,
+                )
+            )
+
+            logger.info(
+                "TRON token inspection "
+                "completed successfully."
+            )
+
+            return report
+
+        except Exception:
+
             logger.exception(
-                "Unexpected error while inspecting TRON token."
+                "TRON token inspection failed."
             )
 
-            print_error(str(error))
+            raise
+        ###########################################################################
+    # Block Operations
+    ###########################################################################
 
-            return {
-                "address": address,
-                "error": str(error),
-            }
-
-    def block_explorer(self, block_number: int) -> Dict[str, Any]:
+    def block_explorer(
+        self,
+        block_identifier: str | int,
+    ) -> dict[str, Any]:
         """
         Explore a TRON block.
 
         Parameters
         ----------
-        block_number : int
-            TRON block number.
+        block_identifier : str | int
+            TRON block number, block hash,
+            or supported block identifier.
 
         Returns
         -------
-        Dict[str, Any]
-            Block information.
+        dict[str, Any]
+            TRON block inspection report.
         """
-        logger.info(f"Exploring TRON block: {block_number}")
 
         try:
-            return get_block(block_number)
 
-        except Exception as error:
-            logger.exception(
-                "Unexpected error while exploring TRON block."
+            logger.info(
+                "Exploring TRON block: %s",
+                block_identifier,
             )
 
-            print_error(str(error))
+            report = (
+                self.block_service
+                .get_block_report(
+                    block_identifier,
+                )
+            )
 
-            return {
-                "number": block_number,
-                "error": str(error),
-            }
+            logger.info(
+                "TRON block exploration "
+                "completed successfully."
+            )
 
-    def transaction_analyzer(self, tx_hash: str) -> Dict[str, Any]:
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "TRON block exploration failed."
+            )
+
+            raise
+
+    ###########################################################################
+    # Transaction Operations
+    ###########################################################################
+
+    def transaction_analyzer(
+        self,
+        tx_hash: str,
+    ) -> dict[str, Any]:
         """
         Analyze a TRON transaction.
 
         Parameters
         ----------
         tx_hash : str
-            Transaction hash.
+            TRON transaction hash.
 
         Returns
         -------
-        Dict[str, Any]
-            Transaction analysis report.
+        dict[str, Any]
+            TRON transaction analysis report.
         """
-        logger.info(f"Analyzing TRON transaction: {tx_hash}")
 
         try:
-            return get_transaction(tx_hash)
 
-        except Exception as error:
-            logger.exception(
-                "Unexpected error while analyzing TRON transaction."
+            logger.info(
+                "Analyzing TRON transaction: %s",
+                tx_hash,
             )
 
-            print_error(str(error))
+            report = (
+                self.transaction_service
+                .get_transaction_report(
+                    tx_hash,
+                )
+            )
 
-            return {
+            logger.info(
+                "TRON transaction analysis "
+                "completed successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "TRON transaction analysis failed."
+            )
+
+            raise
+
+    ###########################################################################
+    # Transaction Confirmation Operations
+    ###########################################################################
+
+    def transaction_confirmations(
+        self,
+        tx_hash: str,
+    ) -> dict[str, Any]:
+        """
+        Retrieve TRON transaction confirmations.
+
+        Parameters
+        ----------
+        tx_hash : str
+            TRON transaction hash.
+
+        Returns
+        -------
+        dict[str, Any]
+            Transaction confirmation report.
+        """
+
+        try:
+
+            logger.info(
+                "Checking TRON transaction confirmations: %s",
+                tx_hash,
+            )
+
+            confirmations = (
+                self.transaction_service
+                .get_transaction_confirmations(
+                    tx_hash,
+                )
+            )
+
+            report = {
                 "hash": tx_hash,
-                "error": str(error),
-            }  
+                "confirmations": confirmations,
+                "status": (
+                    "Confirmed"
+                    if confirmations >= 19
+                    else (
+                        "Pending"
+                        if confirmations >= 1
+                        else "Unconfirmed"
+                    )
+                ),
+            }
+
+            logger.info(
+                "TRON transaction confirmation "
+                "check completed successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "TRON transaction confirmation "
+                "check failed."
+            )
+
+            raise
+            ###########################################################################
+    # Representation
+    ###########################################################################
+
+    def __repr__(
+        self,
+    ) -> str:
+        """
+        Return a developer-friendly representation.
+        """
+
+        return (
+            f"{self.__class__.__name__}("
+            f"services=5"
+            ")"
+        )
+
+
+###############################################################################
+# Public Exports
+###############################################################################
+
+__all__ = [
+    "TronController",
+]
+
+
+###############################################################################
+# End of File
+###############################################################################

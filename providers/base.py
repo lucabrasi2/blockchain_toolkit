@@ -311,7 +311,17 @@ class BaseProvider(ABC):
         provider = Web3.HTTPProvider(self.http_url)
         web3 = Web3(provider)
 
-        if not web3.is_connected():
+        try:
+            connected = web3.is_connected()
+        except Exception as error:
+            logger.exception("Connection raised an exception: %s", error)
+            self._statistics.failed_connections += 1
+            self._statistics.last_failure = datetime.utcnow()
+            self._status = ProviderStatus.OFFLINE
+            raise ConnectionError(f"Unable to connect to {self.name}") from error
+
+        if not connected:
+            logger.error("Connection failed using URL: %s", self.http_url)
             self._statistics.failed_connections += 1
             self._statistics.last_failure = datetime.utcnow()
             self._status = ProviderStatus.OFFLINE

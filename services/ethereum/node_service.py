@@ -1,103 +1,254 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Module:
-    Node Service
+Module
+------
+services.ethereum.node_service
 
-Purpose:
-    Business logic for node validation and monitoring.
+Purpose
+-------
+Business logic for Ethereum node validation and monitoring.
 
-Responsibilities:
-    • Validate single node
-    • Compare multiple nodes
-    • Monitor node health
-    • Generate node reports
+Responsibilities
+----------------
+• Validate the current node
+• Validate custom nodes
+• Compare multiple nodes
+• Generate node health reports
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Author
+------
+Jaramogi Diddy
+
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
 
-from typing import Dict, Any, List, Optional
+from __future__ import annotations
+
+from typing import Any
 
 from core.logger import get_logger
-from ethereum.node_validator import validate_node, compare_nodes
-from ethereum.connection import get_connection
 
+from ethereum.node_validator import (
+    compare_nodes as _compare_nodes,
+    validate_node as _validate_node,
+)
 
 logger = get_logger(__name__)
 
 
 class NodeService:
     """
-    Node validation and monitoring service.
+    Ethereum node validation and monitoring service.
     """
 
-    def __init__(self):
-        """Initialize the Node Service."""
-        logger.info("NodeService initialized.")
+    ###########################################################################
+    # Construction
+    ###########################################################################
 
-    def validate_current_node(self) -> Dict[str, Any]:
+    def __init__(self) -> None:
         """
-        Validate the current node from connection.
+        Initialize the Node Service.
+        """
+
+        logger.info(
+            "NodeService initialized."
+        )
+
+    ###########################################################################
+    # Current Node Validation
+    ###########################################################################
+
+    def validate_current_node(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Validate the currently configured node.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Node validation report.
         """
-        logger.info("Validating current node")
-        return validate_node()
 
-    def validate_node(self, rpc_url: str) -> Dict[str, Any]:
+        logger.info(
+            "Validating current node."
+        )
+
+        try:
+
+            report = _validate_node()
+
+            logger.info(
+                "Current node validated successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Failed to validate current node."
+            )
+
+            raise
+
+    ###########################################################################
+    # Custom Node Validation
+    ###########################################################################
+
+    def validate_node(
+        self,
+        rpc_url: str,
+    ) -> dict[str, Any]:
         """
-        Validate a specific node.
+        Validate a specific RPC node.
 
         Parameters
         ----------
         rpc_url : str
-            RPC URL to validate.
+            RPC endpoint to validate.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Node validation report.
         """
-        logger.info(f"Validating node: {rpc_url}")
-        return validate_node(rpc_url)
 
-    def compare_nodes(self, node_urls: List[str]) -> Dict[str, Any]:
+        logger.info(
+            "Validating node: %s",
+            rpc_url,
+        )
+
+        try:
+
+            report = _validate_node(
+                rpc_url,
+            )
+
+            logger.info(
+                "Node validated successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Failed to validate node: %s",
+                rpc_url,
+            )
+
+            raise
+
+    ###########################################################################
+    # Node Comparison
+    ###########################################################################
+
+    def compare_nodes(
+        self,
+        node_urls: list[str],
+    ) -> dict[str, Any]:
         """
-        Compare multiple nodes.
+        Compare multiple Ethereum nodes.
 
         Parameters
         ----------
-        node_urls : List[str]
-            List of node RPC URLs.
+        node_urls : list[str]
+            List of RPC endpoints.
 
         Returns
         -------
-        Dict[str, Any]
-            Comparison report.
+        dict[str, Any]
+            Node comparison report.
         """
-        logger.info(f"Comparing {len(node_urls)} nodes")
-        return compare_nodes(node_urls)
 
-    def get_node_health_report(self, rpc_url: Optional[str] = None) -> Dict[str, Any]:
+        logger.info(
+            "Comparing %s nodes.",
+            len(node_urls),
+        )
+
+        try:
+
+            report = _compare_nodes(
+                node_urls,
+            )
+
+            logger.info(
+                "Node comparison completed successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Failed to compare nodes."
+            )
+
+            raise
+
+    ###########################################################################
+    # Node Health Report
+    ###########################################################################
+
+    def get_node_health_report(
+        self,
+        rpc_url: str | None = None,
+    ) -> dict[str, Any]:
         """
-        Get a node health report.
+        Generate a node health report.
 
         Parameters
         ----------
-        rpc_url : str, optional
-            RPC URL to check.
+        rpc_url : str | None
+            Optional RPC endpoint.
 
         Returns
         -------
-        Dict[str, Any]
-            Health report.
+        dict[str, Any]
+            Node health report.
         """
-        if rpc_url:
-            return validate_node(rpc_url)
-        else:
-            return validate_node()
+
+        logger.info(
+            "Generating node health report."
+        )
+
+        try:
+
+            if rpc_url is None:
+
+                report = _validate_node()
+
+            else:
+
+                report = _validate_node(
+                    rpc_url,
+                )
+
+            logger.info(
+                "Node health report generated successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Failed to generate node health report."
+            )
+
+            raise
+
+
+###############################################################################
+# End of File
+###############################################################################

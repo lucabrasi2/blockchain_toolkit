@@ -14,7 +14,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API Base URL - We'll update this later
-const API_URL = 'http://172.20.189.103:5000';
+const API_URL = 'http://localhost:5000';
 
 // ============ Login Screen ============
 const LoginScreen = ({ navigation }) => {

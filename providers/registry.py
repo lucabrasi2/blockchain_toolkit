@@ -29,11 +29,15 @@ Version
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Type
+from typing import Type
+
+from core.logger import get_logger
 
 from providers.base import BaseProvider
-from providers.exceptions import ProviderNotFoundError
-from core.logger import get_logger
+from providers.exceptions import (
+    DuplicateRegistrationError,
+    ProviderNotFoundError,
+)
 
 logger = get_logger(__name__)
 
@@ -41,10 +45,13 @@ logger = get_logger(__name__)
 class ProviderRegistry:
     """
     Enterprise provider registry.
+
+    Maintains a catalog of provider implementations and
+    their aliases.
     """
 
-    _providers: Dict[str, Type[BaseProvider]] = {}
-    _aliases: Dict[str, str] = {}
+    _providers: dict[str, Type[BaseProvider]] = {}
+    _aliases: dict[str, str] = {}
 
     ###########################################################################
     # Registration
@@ -55,7 +62,7 @@ class ProviderRegistry:
         cls,
         name: str,
         provider_class: Type[BaseProvider],
-        alias: Optional[List[str]] = None,
+        alias: list[str] | None = None,
     ) -> None:
         """
         Register a provider class.
@@ -64,21 +71,23 @@ class ProviderRegistry:
         ----------
         name : str
             Provider name.
+
         provider_class : Type[BaseProvider]
-            Provider class.
-        alias : Optional[List[str]]
-            Alternative names for the provider.
+            Provider implementation.
+
+        alias : list[str] | None
+            Optional provider aliases.
 
         Raises
         ------
         DuplicateRegistrationError
             If the provider is already registered.
         """
-        from providers.exceptions import DuplicateRegistrationError
 
-        name_lower = name.lower()
+        name_lower = name.strip().lower()
 
         if name_lower in cls._providers:
+
             raise DuplicateRegistrationError(
                 f"Provider '{name}' is already registered."
             )
@@ -86,159 +95,250 @@ class ProviderRegistry:
         cls._providers[name_lower] = provider_class
 
         if alias:
-            for a in alias:
-                cls._aliases[a.lower()] = name_lower
 
-        logger.info(f"Registered provider: {name}")
+            for item in alias:
+                cls._aliases[item.strip().lower()] = name_lower
+
+        logger.info(
+            "Registered provider '%s'.",
+            name_lower,
+        )
+
+    ###########################################################################
+    # Lookup
+    ###########################################################################
 
     @classmethod
-    def get(cls, name: str) -> Type[BaseProvider]:
+    def get(
+        cls,
+        name: str,
+    ) -> Type[BaseProvider]:
         """
-        Get a provider class by name.
+        Retrieve a registered provider class.
 
         Parameters
         ----------
         name : str
-            Provider name.
+            Provider name or alias.
 
         Returns
         -------
         Type[BaseProvider]
-            Provider class.
+            Registered provider class.
 
         Raises
         ------
         ProviderNotFoundError
-            If the provider is not found.
+            If the provider cannot be found.
         """
-        key = name.lower()
 
-        # Check if it's an alias
+        key = name.strip().lower()
+
         if key in cls._aliases:
             key = cls._aliases[key]
 
         if key not in cls._providers:
-            available = cls.list_providers()
+
             raise ProviderNotFoundError(
                 f"Provider '{name}' not found. "
-                f"Available: {available}"
+                f"Available: {cls.list_providers()}"
             )
 
         return cls._providers[key]
 
     @classmethod
-    def contains(cls, name: str) -> bool:
+    def contains(
+        cls,
+        name: str,
+    ) -> bool:
         """
-        Check if a provider is registered.
+        Determine whether a provider is registered.
 
         Parameters
         ----------
         name : str
-            Provider name.
+            Provider name or alias.
 
         Returns
         -------
         bool
-            True if registered.
+            True if the provider exists.
         """
-        key = name.lower()
+
+        key = name.strip().lower()
 
         if key in cls._aliases:
             key = cls._aliases[key]
 
         return key in cls._providers
+        ###########################################################################
+    # Listing
+    ###########################################################################
 
     @classmethod
-    def list_providers(cls) -> List[str]:
+    def list_providers(
+        cls,
+    ) -> list[str]:
         """
-        List all registered providers.
+        Return registered provider names.
 
         Returns
         -------
-        List[str]
-            List of provider names.
+        list[str]
+            Registered provider names.
         """
+
         return sorted(cls._providers.keys())
 
     @classmethod
-    def list_aliases(cls) -> Dict[str, str]:
+    def list_aliases(
+        cls,
+    ) -> dict[str, str]:
         """
-        List all provider aliases.
+        Return registered provider aliases.
 
         Returns
         -------
-        Dict[str, str]
+        dict[str, str]
             Mapping of alias to provider name.
         """
+
         return cls._aliases.copy()
 
     @classmethod
-    def is_registered(cls, name: str) -> bool:
+    def is_registered(
+        cls,
+        name: str,
+    ) -> bool:
         """
-        Check if a provider is registered.
+        Determine whether a provider is registered.
 
         Parameters
         ----------
         name : str
-            Provider name.
+            Provider name or alias.
 
         Returns
         -------
         bool
-            True if registered.
+            True if the provider exists.
         """
-        key = name.lower()
-        return key in cls._providers or key in cls._aliases
+
+        key = name.strip().lower()
+
+        return (
+            key in cls._providers
+            or key in cls._aliases
+        )
+
+    ###########################################################################
+    # Unregistration
+    ###########################################################################
 
     @classmethod
-    def unregister(cls, name: str) -> None:
+    def unregister(
+        cls,
+        name: str,
+    ) -> None:
         """
         Unregister a provider.
 
         Parameters
         ----------
         name : str
-            Provider name.
+            Provider name or alias.
 
         Raises
         ------
         ProviderNotFoundError
-            If the provider is not found.
+            If the provider is not registered.
         """
-        key = name.lower()
+
+        key = name.strip().lower()
 
         if key in cls._aliases:
             key = cls._aliases[key]
 
         if key not in cls._providers:
-            raise ProviderNotFoundError(f"Provider '{name}' not found.")
+
+            raise ProviderNotFoundError(
+                f"Provider '{name}' not found."
+            )
 
         del cls._providers[key]
 
-        # Remove any aliases pointing to this provider
-        to_remove = [k for k, v in cls._aliases.items() if v == key]
-        for alias in to_remove:
+        #
+        # Remove aliases that reference this provider.
+        #
+        aliases_to_remove = [
+            alias
+            for alias, provider in cls._aliases.items()
+            if provider == key
+        ]
+
+        for alias in aliases_to_remove:
             del cls._aliases[alias]
 
-        logger.info(f"Unregistered provider: {name}")
+        logger.info(
+            "Unregistered provider '%s'.",
+            key,
+        )
+
+    ###########################################################################
+    # Registry Management
+    ###########################################################################
 
     @classmethod
-    def clear(cls) -> None:
-        """Clear all registered providers."""
+    def clear(
+        cls,
+    ) -> None:
+        """
+        Remove every registered provider.
+        """
+
         cls._providers.clear()
         cls._aliases.clear()
-        logger.info("Provider registry cleared.")
+
+        logger.info(
+            "Provider registry cleared."
+        )
+
+    ###########################################################################
+    # Properties
+    ###########################################################################
 
     @property
-    def count(self) -> int:
-        """Return the number of registered providers."""
-        return len(self._providers)
+    def count(
+        self,
+    ) -> int:
+        """
+        Return the number of registered providers.
+        """
 
-    def __iter__(self):
-        """Iterate over registered providers."""
-        return iter(self._providers.items())
+        return len(type(self)._providers)
 
-    def __len__(self) -> int:
+    ###########################################################################
+    # Magic Methods
+    ###########################################################################
+
+    def __iter__(
+        self,
+    ):
+        """
+        Iterate over registered providers.
+        """
+
+        return iter(
+            type(self)._providers.items()
+        )
+
+    def __len__(
+        self,
+    ) -> int:
+        """
+        Return the number of registered providers.
+        """
+
         return self.count
 
 

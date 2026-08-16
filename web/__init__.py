@@ -23,11 +23,13 @@ Version
 2.0 Enterprise
 ===============================================================================
 """
+# UBP Web package
+#
+# Do not import application modules here.
+# Importing app.py or app_simple.py at package level causes
+# application initialization as a side effect.
 
-# Import the simple app to avoid circular imports
-from web.app_simple import app
-
-__all__ = ["app"]
+__all__ = []
 
 
 ###############################################################################

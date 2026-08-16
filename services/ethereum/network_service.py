@@ -1,34 +1,41 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Version : 2.0.0
-Module  : Ethereum Network Service
-Author  : Jaramogi Diddy
+Module
+------
+services.ethereum.network_service
 
-Architecture Layer
-------------------
-Service Layer
+Purpose
+-------
+Business logic for Ethereum network operations.
 
 Responsibilities
 ----------------
-✓ Generate Ethereum network reports
-✓ Coordinate network business logic
-✓ Return immutable network information
+• Generate Ethereum network reports
+• Coordinate network business logic
+• Return controller-friendly network information
 
-Not Responsible For
--------------------
-✗ Blockchain communication
-✗ CLI formatting
-✗ Provider management
+Author
+------
+Jaramogi Diddy
+
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
 
 from __future__ import annotations
 
-from core.logger import get_logger
+from typing import Any
 
-from ethereum.network import (
-    get_network_information,
-)
+from core.logger import get_logger
+from ethereum.network import get_network_information
 
 logger = get_logger(__name__)
 
@@ -41,7 +48,11 @@ class NetworkService:
     network operations.
     """
 
-    def __init__(self):
+    ###########################################################################
+    # Construction
+    ###########################################################################
+
+    def __init__(self) -> None:
         """
         Initialize the Network Service.
         """
@@ -50,16 +61,19 @@ class NetworkService:
             "NetworkService initialized."
         )
 
+    ###########################################################################
+    # Network Report
+    ###########################################################################
+
     def get_network_report(
         self,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
-        Generate a complete Ethereum
-        network report.
+        Generate a complete Ethereum network report.
 
         Returns
         -------
-        dict
+        dict[str, Any]
             Ethereum network information.
         """
 
@@ -67,10 +81,25 @@ class NetworkService:
             "Generating Ethereum network report."
         )
 
-        report = get_network_information()
+        try:
 
-        logger.info(
-            "Network report generated successfully."
-        )
+            report = get_network_information()
 
-        return report
+            logger.info(
+                "Ethereum network report generated successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Failed to generate Ethereum network report."
+            )
+
+            raise
+
+
+###############################################################################
+# End of File
+###############################################################################

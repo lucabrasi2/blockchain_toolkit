@@ -1,13 +1,43 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Version : 1.3.0
-Module  : Ethereum Wallet Service
-Author  : Jaramogi Diddy
+Module
+------
+services.ethereum.wallet_service
 
-Business logic for Ethereum wallet
-inspection and analysis.
+Purpose
+-------
+Business logic for Ethereum wallet inspection and analysis.
+
+Responsibilities
+----------------
+- Validate Ethereum wallet addresses
+- Retrieve ETH balances
+- Retrieve wallet nonce
+- Retrieve transaction counts
+- Retrieve token balances
+- Classify Ethereum addresses
+- Generate wallet reports
+- Generate wallet status information
+
+Author
+------
+Jaramogi Diddy
+
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
+
+from __future__ import annotations
+
+from typing import Any
 
 from core.logger import get_logger
 
@@ -20,15 +50,33 @@ from ethereum.wallets import (
 )
 
 from ethereum.contracts import (
-    is_contract,
     classify_address,
+)
+
+from constants.contract_types import (
+    EOA,
+    EOA_DELEGATED,
+    CONTRACT,
+    ERC20,
+    ERC721,
+    ERC1155,
 )
 
 from exceptions.blockchain_exceptions import (
     InvalidWalletAddressError,
 )
 
+
+###############################################################################
+# Logger
+###############################################################################
+
 logger = get_logger(__name__)
+
+
+###############################################################################
+# Wallet Service
+###############################################################################
 
 
 class WalletService:
@@ -36,7 +84,13 @@ class WalletService:
     Ethereum Wallet Intelligence Service.
     """
 
-    def __init__(self):
+    ###########################################################################
+    # Construction
+    ###########################################################################
+
+    def __init__(
+        self,
+    ) -> None:
         """
         Initialize the Wallet Service.
         """
@@ -45,12 +99,31 @@ class WalletService:
             "WalletService initialized."
         )
 
+    ###########################################################################
+    # Address Validation
+    ###########################################################################
+
     def validate_address(
         self,
         address: str,
     ) -> bool:
         """
         Validate an Ethereum address.
+
+        Parameters
+        ----------
+        address : str
+            Ethereum address.
+
+        Returns
+        -------
+        bool
+            True if the address is valid.
+
+        Raises
+        ------
+        InvalidWalletAddressError
+            If the address is invalid.
         """
 
         logger.info(
@@ -73,10 +146,45 @@ class WalletService:
 
         return True
 
+    ###########################################################################
+    # Address Classification
+    ###########################################################################
+
+    def _is_contract_address(
+        self,
+        classification: str,
+    ) -> bool:
+        """
+        Determine whether an address classification
+        represents a smart contract.
+
+        Parameters
+        ----------
+        classification : str
+            Address classification returned by
+            classify_address().
+
+        Returns
+        -------
+        bool
+            True if the address represents a contract.
+        """
+
+        return classification in (
+            CONTRACT,
+            ERC20,
+            ERC721,
+            ERC1155,
+        )
+
+    ###########################################################################
+    # Full Wallet Report
+    ###########################################################################
+
     def get_wallet_report(
         self,
         address: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Generate a complete wallet report.
 
@@ -87,40 +195,87 @@ class WalletService:
 
         Returns
         -------
-        dict
+        dict[str, Any]
             Complete wallet report.
         """
 
         logger.info(
-            f"Generating wallet report for {address}"
+            "Generating wallet report for %s.",
+            address,
         )
 
-        # Validate the address
-        self.validate_address(address)
+        #######################################################################
+        # Validate Address
+        #######################################################################
 
-        # Get basic wallet info
-        balance = get_eth_balance(address)
-        nonce = get_nonce(address)
-        transaction_count = get_transaction_count(address)
+        self.validate_address(
+            address,
+        )
 
-        # Check if it's a contract
-        is_contract_address = is_contract(address)
-        
-        # Classify the address
-        classification = classify_address(address)
+        #######################################################################
+        # Retrieve Wallet Information
+        #######################################################################
 
-        # Get token balances (if any)
-        token_balances = get_token_balances(address)
+        balance = get_eth_balance(
+            address,
+        )
 
-        # Build the report
-        report = {
+        nonce = get_nonce(
+            address,
+        )
+
+        transaction_count = get_transaction_count(
+            address,
+        )
+
+        #######################################################################
+        # Address Classification
+        #######################################################################
+
+        # classify_address() remains the single source of truth
+        # for Ethereum address classification.
+
+        classification = classify_address(
+            address,
+        )
+
+        is_contract_address = self._is_contract_address(
+            classification,
+        )
+
+        #######################################################################
+        # Token Balances
+        #######################################################################
+
+        token_balances = get_token_balances(
+            address,
+        )
+
+        #######################################################################
+        # Wallet Report
+        #######################################################################
+
+        report: dict[str, Any] = {
             "address": address,
+
             "is_contract": is_contract_address,
+
             "classification": classification,
-            "balance_eth": balance.get("ether", 0),
-            "balance_wei": balance.get("wei", 0),
+
+            "balance_eth": balance.get(
+                "ether",
+                0,
+            ),
+
+            "balance_wei": balance.get(
+                "wei",
+                0,
+            ),
+
             "nonce": nonce,
+
             "transaction_count": transaction_count,
+
             "token_balances": token_balances,
         }
 
@@ -130,10 +285,18 @@ class WalletService:
 
         return report
 
+
+###############################################################################
+# End of Part 1
+###############################################################################
+    ###########################################################################
+    # Wallet Balance
+    ###########################################################################
+
     def get_wallet_balance(
         self,
         address: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Get wallet balance only.
 
@@ -144,28 +307,57 @@ class WalletService:
 
         Returns
         -------
-        dict
+        dict[str, Any]
             Balance information.
         """
 
         logger.info(
-            f"Getting balance for {address}"
+            "Getting balance for %s.",
+            address,
         )
 
-        self.validate_address(address)
+        #######################################################################
+        # Validate Address
+        #######################################################################
 
-        balance = get_eth_balance(address)
+        self.validate_address(
+            address,
+        )
+
+        #######################################################################
+        # Retrieve Balance
+        #######################################################################
+
+        balance = get_eth_balance(
+            address,
+        )
+
+        #######################################################################
+        # Balance Report
+        #######################################################################
 
         return {
             "address": address,
-            "balance_eth": balance.get("ether", 0),
-            "balance_wei": balance.get("wei", 0),
+
+            "balance_eth": balance.get(
+                "ether",
+                0,
+            ),
+
+            "balance_wei": balance.get(
+                "wei",
+                0,
+            ),
         }
+
+    ###########################################################################
+    # Wallet Status
+    ###########################################################################
 
     def get_wallet_status(
         self,
         address: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Get wallet status information.
 
@@ -176,27 +368,115 @@ class WalletService:
 
         Returns
         -------
-        dict
+        dict[str, Any]
             Wallet status information.
         """
 
         logger.info(
-            f"Getting status for {address}"
+            "Getting status for %s.",
+            address,
         )
 
-        self.validate_address(address)
+        #######################################################################
+        # Validate Address
+        #######################################################################
 
-        balance = get_eth_balance(address)
-        nonce = get_nonce(address)
-        transaction_count = get_transaction_count(address)
-        is_contract_address = is_contract(address)
+        self.validate_address(
+            address,
+        )
+
+        #######################################################################
+        # Retrieve Wallet Information
+        #######################################################################
+
+        balance = get_eth_balance(
+            address,
+        )
+
+        nonce = get_nonce(
+            address,
+        )
+
+        transaction_count = get_transaction_count(
+            address,
+        )
+
+        #######################################################################
+        # Address Classification
+        #######################################################################
+
+        # classify_address() remains the single source of truth.
+
+        classification = classify_address(
+            address,
+        )
+
+        is_contract_address = self._is_contract_address(
+            classification,
+        )
+
+        #######################################################################
+        # Wallet Status Report
+        #######################################################################
 
         return {
             "address": address,
+
+            "classification": classification,
+
             "is_contract": is_contract_address,
-            "balance_eth": balance.get("ether", 0),
-            "balance_wei": balance.get("wei", 0),
+
+            "balance_eth": balance.get(
+                "ether",
+                0,
+            ),
+
+            "balance_wei": balance.get(
+                "wei",
+                0,
+            ),
+
             "nonce": nonce,
+
             "transaction_count": transaction_count,
-            "has_balance": balance.get("wei", 0) > 0,
+
+            "has_balance": (
+                balance.get(
+                    "wei",
+                    0,
+                ) > 0
+            ),
         }
+
+
+###############################################################################
+# End of Part 2
+###############################################################################
+    ###########################################################################
+    # Representation
+    ###########################################################################
+
+    def __repr__(
+        self,
+    ) -> str:
+        """
+        Return a developer-friendly representation.
+        """
+
+        return (
+            f"{self.__class__.__name__}()"
+        )
+
+
+###############################################################################
+# Public Exports
+###############################################################################
+
+__all__ = [
+    "WalletService",
+]
+
+
+###############################################################################
+# End of File
+###############################################################################

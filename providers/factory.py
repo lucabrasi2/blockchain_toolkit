@@ -35,12 +35,10 @@ Version
 
 from __future__ import annotations
 
-import logging
-
 from typing import Any
-from typing import Dict
-from typing import Optional
 from typing import Type
+
+from core.logger import get_logger
 
 from providers.base import BaseProvider
 from providers.config import ProviderConfig
@@ -51,7 +49,7 @@ from providers.exceptions import (
     ProviderNotFoundError,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ProviderFactory:
@@ -74,8 +72,17 @@ class ProviderFactory:
 
     def __init__(
         self,
-        registry: Optional[ProviderRegistry] = None,
+        registry: ProviderRegistry | None = None,
     ) -> None:
+        """
+        Initialize the provider factory.
+
+        Parameters
+        ----------
+        registry : ProviderRegistry | None
+            Registry instance to use. If omitted,
+            a new registry is created.
+        """
 
         self._registry = registry or ProviderRegistry()
 
@@ -109,10 +116,10 @@ class ProviderFactory:
 
         Parameters
         ----------
-        name:
+        name : str
             Provider name.
 
-        provider_class:
+        provider_class : Type[BaseProvider]
             Provider implementation class.
         """
 
@@ -132,6 +139,11 @@ class ProviderFactory:
     ) -> None:
         """
         Remove a provider implementation.
+
+        Parameters
+        ----------
+        name : str
+            Provider name.
         """
 
         self._registry.unregister(name)
@@ -148,25 +160,50 @@ class ProviderFactory:
     def build_config(
         self,
         provider: str,
-        options: Dict[str, Any],
+        options: dict[str, Any],
     ) -> ProviderConfig:
         """
         Build a ProviderConfig from a dictionary.
+
+        Parameters
+        ----------
+        provider : str
+            Provider name.
+
+        options : dict[str, Any]
+            Provider configuration options.
+
+        Returns
+        -------
+        ProviderConfig
+            Provider configuration object.
+
+        Raises
+        ------
+        ProviderConfigurationError
+            If the configuration is invalid.
         """
 
         provider = provider.strip().lower()
 
-        # Ensure network is set
-        if "network" not in options:
-            options["network"] = "mainnet"
-
+        #
+        # Create a copy so the caller's dictionary
+        # is never modified.
+        #
         configuration = dict(options)
+
+        configuration.setdefault(
+            "network",
+            "mainnet",
+        )
+
         configuration["provider"] = provider
 
         try:
             return ProviderConfig(
                 **configuration,
             )
+
         except TypeError as exc:
             raise ProviderConfigurationError(
                 f"Invalid configuration for "
@@ -184,6 +221,19 @@ class ProviderFactory:
     ) -> None:
         """
         Validate a provider configuration.
+
+        Parameters
+        ----------
+        config : ProviderConfig
+            Provider configuration.
+
+        Raises
+        ------
+        ProviderConfigurationError
+            If configuration is invalid.
+
+        ProviderNotFoundError
+            If the provider is not registered.
         """
 
         if not config.provider:
@@ -200,8 +250,7 @@ class ProviderFactory:
                 f"Provider '{provider}' "
                 f"is not registered."
             )
-
-    ###########################################################################
+        ###########################################################################
     # Provider Creation
     ###########################################################################
 
@@ -211,6 +260,16 @@ class ProviderFactory:
     ) -> BaseProvider:
         """
         Create a provider instance.
+
+        Parameters
+        ----------
+        config : ProviderConfig
+            Provider configuration.
+
+        Returns
+        -------
+        BaseProvider
+            Instantiated provider.
         """
 
         self.validate(config)
@@ -231,10 +290,23 @@ class ProviderFactory:
     def create_from_dict(
         self,
         provider: str,
-        options: Dict[str, Any],
+        options: dict[str, Any],
     ) -> BaseProvider:
         """
-        Create a provider from a dictionary.
+        Create a provider from a configuration dictionary.
+
+        Parameters
+        ----------
+        provider : str
+            Provider name.
+
+        options : dict[str, Any]
+            Provider configuration options.
+
+        Returns
+        -------
+        BaseProvider
+            Instantiated provider.
         """
 
         config = self.build_config(
@@ -259,6 +331,11 @@ class ProviderFactory:
             api_key="...",
             network="mainnet",
         )
+
+        Returns
+        -------
+        BaseProvider
+            Instantiated provider.
         """
 
         return self.create_from_dict(
@@ -272,19 +349,18 @@ class ProviderFactory:
 
     def get_provider(
         self,
-        name: Optional[str] = None,
-        *args,
-        **kwargs,
+        name: str | None = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> BaseProvider:
         """
-        Get or create a provider by name.
-
-        This method is called by the public provider accessor.
+        Get or create a provider.
 
         Parameters
         ----------
-        name : str, optional
-            Provider name. If None, returns the default provider.
+        name : str | None
+            Provider name. If omitted,
+            the default provider is returned.
 
         Returns
         -------
@@ -294,23 +370,40 @@ class ProviderFactory:
         Raises
         ------
         ProviderNotFoundError
-            If the provider is not found.
+            If the provider is not registered.
         """
+
+        #
+        # Return the default provider.
+        #
         if name is None:
-            # Return the first registered provider as default
+
             providers = self.supported_providers()
+
             if not providers:
-                raise ProviderNotFoundError("No providers registered")
+
+                raise ProviderNotFoundError(
+                    "No providers registered."
+                )
+
             name = providers[0]
 
-        # Check if provider is registered
+        #
+        # Verify registration.
+        #
         if not self.is_supported(name):
+
             raise ProviderNotFoundError(
-                f"Provider '{name}' is not registered. "
-                f"Available: {self.supported_providers()}"
+                f"Provider '{name}' "
+                f"is not registered. "
+                f"Available: "
+                f"{self.supported_providers()}"
             )
 
-        return self.create_by_name(name, **kwargs)
+        return self.create_by_name(
+            name,
+            **kwargs,
+        )
 
     ###########################################################################
     # Discovery
@@ -320,12 +413,12 @@ class ProviderFactory:
         self,
     ) -> list[str]:
         """
-        Return the registered provider names.
+        Return registered provider names.
 
         Returns
         -------
         list[str]
-            Sorted list of registered providers.
+            Sorted provider names.
         """
 
         return self._registry.list_providers()
@@ -339,12 +432,13 @@ class ProviderFactory:
 
         Parameters
         ----------
-        provider:
+        provider : str
             Provider name.
 
         Returns
         -------
         bool
+            True if registered.
         """
 
         return self._registry.contains(
@@ -364,12 +458,13 @@ class ProviderFactory:
 
         Parameters
         ----------
-        provider:
+        provider : str
             Provider name.
 
         Returns
         -------
         Type[BaseProvider]
+            Registered provider class.
         """
 
         return self._registry.get(
@@ -381,6 +476,11 @@ class ProviderFactory:
     ) -> int:
         """
         Return the number of registered providers.
+
+        Returns
+        -------
+        int
+            Number of registered providers.
         """
 
         return self._registry.count
@@ -391,7 +491,7 @@ class ProviderFactory:
         """
         Remove every registered provider.
 
-        Normally this method is used only during testing
+        Normally used only during testing
         or application shutdown.
         """
 
@@ -403,20 +503,20 @@ class ProviderFactory:
             "Cleared %d registered provider(s).",
             count,
         )
-
-    ###########################################################################
+        ###########################################################################
     # Serialization
     ###########################################################################
 
     def to_dict(
         self,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Serialize the factory.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
+            Factory serialization.
         """
 
         providers = self.supported_providers()
@@ -435,9 +535,21 @@ class ProviderFactory:
         provider: str,
     ) -> bool:
         """
-        Support:
+        Determine whether a provider is registered.
 
-            provider in factory
+        Enables:
+
+            "alchemy" in factory
+
+        Parameters
+        ----------
+        provider : str
+            Provider name.
+
+        Returns
+        -------
+        bool
+            True if registered.
         """
 
         return self.is_supported(provider)
@@ -447,6 +559,11 @@ class ProviderFactory:
     ) -> int:
         """
         Return the number of registered providers.
+
+        Returns
+        -------
+        int
+            Number of registered providers.
         """
 
         return self._registry.count
@@ -455,11 +572,11 @@ class ProviderFactory:
         self,
     ):
         """
-        Iterate over registered provider classes.
+        Iterate over registered providers.
 
         Example
         -------
-        >>> for name, cls in factory:
+        >>> for name, provider in factory:
         ...     print(name)
         """
 
@@ -469,7 +586,12 @@ class ProviderFactory:
         self,
     ) -> str:
         """
-        Developer-friendly representation.
+        Return a developer-friendly representation.
+
+        Returns
+        -------
+        str
+            Factory representation.
         """
 
         return (

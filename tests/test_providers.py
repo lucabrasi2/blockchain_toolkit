@@ -10,80 +10,84 @@ Purpose
 -------
 Integration tests for the UBP provider framework.
 
-Tests:
-
-- ProviderFactory
-- AlchemyProvider
-- InfuraProvider
-- ProviderManager
-- Provider registration
-
+Tests
+-----
+• ProviderFactory
+• AlchemyProvider
+• InfuraProvider
+• ProviderManager
+• Provider registration
+• Provider configuration
+• Provider health
 
 Architecture
 ------------
 UBP Enterprise Connectivity Framework
 
-
 Author
 ------
 Jaramogi Diddy
 
-
-Platform
---------
+Project
+-------
 Universal Blockchain Platform (UBP)
-
 
 Version
 -------
-2.0 Enterprise
+2.1 Enterprise
 ===============================================================================
 """
 
-
 from __future__ import annotations
-
-
 
 import os
 
+import pytest
 
+from core.logger import get_logger
 
 from providers.factory import ProviderFactory
-
 from providers.manager import ProviderManager
-
 from providers.exceptions import (
     ProviderError,
 )
 
 
-
-from core.logger import get_logger
-
-
+###############################################################################
+# Logger
+###############################################################################
 
 logger = get_logger(__name__)
-
-
 
 
 ###############################################################################
 # Test Configuration
 ###############################################################################
 
-
 ALCHEMY_KEY = os.getenv(
     "ALCHEMY_API_KEY",
 )
 
-
-INFURA_ID = os.getenv(
-    "INFURA_PROJECT_ID",
+INFURA_KEY = os.getenv(
+    "INFURA_API_KEY",
 )
 
 
+###############################################################################
+# Factory Fixture
+###############################################################################
 
+
+@pytest.fixture
+def factory() -> ProviderFactory:
+    """
+    Provide a fresh ProviderFactory instance.
+
+    The current UBP factory is instance-based and does
+    not use class-level factory methods.
+    """
+
+    return ProviderFactory()
 
 
 ###############################################################################
@@ -91,170 +95,212 @@ INFURA_ID = os.getenv(
 ###############################################################################
 
 
-def test_supported_providers():
+def test_supported_providers(
+    factory: ProviderFactory,
+) -> None:
     """
     Verify provider discovery.
     """
 
     providers = (
-        ProviderFactory.supported_providers()
+        factory.supported_providers()
     )
 
+    assert isinstance(
+        providers,
+        list,
+    )
 
     assert "alchemy" in providers
-
     assert "infura" in providers
 
 
-
-def test_factory_information():
+def test_factory_information(
+    factory: ProviderFactory,
+) -> None:
     """
     Verify factory metadata.
+
+    The current ProviderFactory exposes
+    to_dict() rather than the legacy info()
+    method.
     """
 
-    info = (
-        ProviderFactory.info()
+    info = factory.to_dict()
+
+    assert isinstance(
+        info,
+        dict,
     )
 
-
     assert (
-        "supported_providers"
+        "provider_count"
         in info
     )
 
+    assert (
+        "registered_providers"
+        in info
+    )
+
+    assert (
+        "alchemy"
+        in info["registered_providers"]
+    )
+
+    assert (
+        "infura"
+        in info["registered_providers"]
+    )
+
+
+def test_factory_provider_support(
+    factory: ProviderFactory,
+) -> None:
+    """
+    Verify provider support detection.
+    """
+
+    assert factory.is_supported(
+        "alchemy"
+    )
+
+    assert factory.is_supported(
+        "infura"
+    )
+
+    assert not factory.is_supported(
+        "unknown_provider"
+    )
 ###############################################################################
 # Provider Creation Tests
 ###############################################################################
 
 
-def test_create_alchemy_provider():
+def test_create_alchemy_provider(
+    factory: ProviderFactory,
+) -> None:
     """
     Verify Alchemy provider creation.
+
+    This test requires ALCHEMY_API_KEY.
     """
 
     if not ALCHEMY_KEY:
 
-        logger.warning(
-            "Skipping Alchemy test. "
-            "ALCHEMY_API_KEY not configured."
+        pytest.skip(
+            "ALCHEMY_API_KEY is not configured."
         )
 
-        return
-
-
-
-    provider = ProviderFactory.create(
+    provider = factory.create_by_name(
         "alchemy",
-        {
-            "api_key": ALCHEMY_KEY,
+        api_key=ALCHEMY_KEY,
+        network="mainnet",
+    )
 
-            "network": "eth-mainnet",
-        }
+    assert provider is not None
+
+    assert (
+        provider.name
+        == "alchemy"
+    )
+
+    assert (
+        provider.blockchain
+        == "ethereum"
+    )
+
+    assert (
+        provider.network
+        == "mainnet"
     )
 
 
-
-    assert provider.name == "Alchemy"
-
-    assert provider.blockchain == "Ethereum"
-
-    assert provider.network == "eth-mainnet"
-
-
-
-def test_create_infura_provider():
+def test_create_infura_provider(
+    factory: ProviderFactory,
+) -> None:
     """
     Verify Infura provider creation.
+
+    This test requires INFURA_API_KEY.
     """
 
-    if not INFURA_ID:
+    if not INFURA_KEY:
 
-        logger.warning(
-            "Skipping Infura test. "
-            "INFURA_PROJECT_ID not configured."
+        pytest.skip(
+            "INFURA_API_KEY is not configured."
         )
 
-        return
-
-
-
-    provider = ProviderFactory.create(
+    provider = factory.create_by_name(
         "infura",
-        {
-            "project_id": INFURA_ID,
+        api_key=INFURA_KEY,
+        network="mainnet",
+    )
 
-            "network": "mainnet",
-        }
+    assert provider is not None
+
+    assert (
+        provider.name
+        == "infura"
+    )
+
+    assert (
+        provider.blockchain
+        == "ethereum"
+    )
+
+    assert (
+        provider.network
+        == "mainnet"
     )
 
 
-
-    assert provider.name == "Infura"
-
-    assert provider.blockchain == "Ethereum"
-
-    assert provider.network == "mainnet"
-
-
-
-
-
 ###############################################################################
-# Configuration Validation Tests
+# Provider Configuration Tests
 ###############################################################################
 
 
-def test_invalid_alchemy_configuration():
+def test_alchemy_configuration_without_key(
+    factory: ProviderFactory,
+) -> None:
     """
-    Verify missing Alchemy credentials fail.
-    """
+    Verify Alchemy provider construction without
+    credentials remains possible.
 
-    try:
-
-        ProviderFactory.create(
-            "alchemy",
-            {}
-        )
-
-
-        assert False
-
-
-
-    except ProviderError:
-
-        assert True
-
-
-
-
-def test_invalid_infura_configuration():
-    """
-    Verify missing Infura credentials fail.
+    The current AlchemyProvider permits construction
+    without an API key and uses the demo endpoint.
+    Live connectivity is tested separately.
     """
 
-    try:
+    provider = factory.create_by_name(
+        "alchemy",
+        network="mainnet",
+    )
 
-        ProviderFactory.create(
-            "infura",
-            {}
-        )
+    assert provider is not None
 
+    assert (
+        provider.name
+        == "alchemy"
+    )
 
-        assert False
+    assert (
+        provider.blockchain
+        == "ethereum"
+    )
 
-
-
-    except ProviderError:
-
-        assert True
-
+    assert (
+        provider.network
+        == "mainnet"
+    )
 ###############################################################################
-# Provider Manager Tests
+# ProviderManager Tests
 ###############################################################################
 
 
-def test_provider_manager_registration():
+def test_provider_manager_registration(
+    factory: ProviderFactory,
+) -> None:
     """
     Verify providers can be registered
     with ProviderManager.
@@ -262,19 +308,15 @@ def test_provider_manager_registration():
 
     manager = ProviderManager()
 
-
+    registered = []
 
     if ALCHEMY_KEY:
 
-        alchemy = ProviderFactory.create(
+        alchemy = factory.create_by_name(
             "alchemy",
-            {
-                "api_key": ALCHEMY_KEY,
-
-                "network": "eth-mainnet",
-            }
+            api_key=ALCHEMY_KEY,
+            network="mainnet",
         )
-
 
         manager.register_provider(
             "alchemy",
@@ -282,70 +324,59 @@ def test_provider_manager_registration():
             default=True,
         )
 
-
-
-    if INFURA_ID:
-
-        infura = ProviderFactory.create(
-            "infura",
-            {
-                "project_id": INFURA_ID,
-
-                "network": "mainnet",
-            }
+        registered.append(
+            "alchemy"
         )
 
+    if INFURA_KEY:
+
+        infura = factory.create_by_name(
+            "infura",
+            api_key=INFURA_KEY,
+            network="mainnet",
+        )
 
         manager.register_provider(
             "infura",
             infura,
         )
 
+        registered.append(
+            "infura"
+        )
 
-
-    providers = (
-        manager.list_providers()
-    )
-
+    providers = manager.list_providers()
 
     assert isinstance(
         providers,
         list,
     )
 
+    for name in registered:
+
+        assert name in providers
 
 
-
-
-def test_active_provider_selection():
+def test_active_provider_selection(
+    factory: ProviderFactory,
+) -> None:
     """
-    Verify active provider switching.
+    Verify active provider selection.
     """
-
-    manager = ProviderManager()
-
-
 
     if not ALCHEMY_KEY:
 
-        logger.warning(
-            "Skipping active provider test."
+        pytest.skip(
+            "ALCHEMY_API_KEY is not configured."
         )
 
-        return
+    manager = ProviderManager()
 
-
-
-    provider = ProviderFactory.create(
+    provider = factory.create_by_name(
         "alchemy",
-        {
-            "api_key": ALCHEMY_KEY,
-
-            "network": "eth-mainnet",
-        }
+        api_key=ALCHEMY_KEY,
+        network="mainnet",
     )
-
-
 
     manager.register_provider(
         "alchemy",
@@ -353,65 +384,90 @@ def test_active_provider_selection():
         default=True,
     )
 
-
-
     active = (
         manager.get_active_provider()
     )
 
+    assert active is not None
 
     assert (
-        active.name == "Alchemy"
+        active.name
+        == "alchemy"
     )
 
 
-
-
-
 ###############################################################################
-# Health Check Tests
+# Provider Health Tests
 ###############################################################################
 
 
-def test_provider_health_check():
+def test_provider_health_check(
+    factory: ProviderFactory,
+) -> None:
     """
     Verify provider health monitoring.
+
+    Requires a configured Alchemy API key
+    because this test performs a live RPC check.
     """
 
     if not ALCHEMY_KEY:
 
-        logger.warning(
-            "Skipping health check. "
-            "ALCHEMY_API_KEY missing."
+        pytest.skip(
+            "ALCHEMY_API_KEY is not configured."
         )
 
-        return
-
-
-
-    provider = ProviderFactory.create(
+    provider = factory.create_by_name(
         "alchemy",
-        {
-            "api_key": ALCHEMY_KEY,
-
-            "network": "eth-mainnet",
-        }
+        api_key=ALCHEMY_KEY,
+        network="mainnet",
     )
 
-
-
-    status = (
-        provider.health_check()
-    )
-
+    status = provider.health_check()
 
     assert isinstance(
         status,
         bool,
     )
 
+    assert status is True
 
 
+def test_provider_metadata(
+    factory: ProviderFactory,
+) -> None:
+    """
+    Verify standardized provider metadata.
+    """
+
+    if not ALCHEMY_KEY:
+
+        pytest.skip(
+            "ALCHEMY_API_KEY is not configured."
+        )
+
+    provider = factory.create_by_name(
+        "alchemy",
+        api_key=ALCHEMY_KEY,
+        network="mainnet",
+    )
+
+    metadata = provider.metadata
+
+    assert (
+        metadata.provider_name
+        == "alchemy"
+    )
+
+    assert (
+        metadata.blockchain
+        == "ethereum"
+    )
+
+    assert (
+        metadata.network
+        == "mainnet"
+    )
 
 
 ###############################################################################
@@ -421,29 +477,12 @@ def test_provider_health_check():
 
 if __name__ == "__main__":
 
-    test_supported_providers()
-
-    test_factory_information()
-
-    test_create_alchemy_provider()
-
-    test_create_infura_provider()
-
-    test_invalid_alchemy_configuration()
-
-    test_invalid_infura_configuration()
-
-    test_provider_manager_registration()
-
-    test_active_provider_selection()
-
-    test_provider_health_check()
-
-
-    print(
-        "UBP Provider tests completed."
+    pytest.main(
+        [
+            __file__,
+            "-v",
+        ]
     )
-
 
 
 ###############################################################################

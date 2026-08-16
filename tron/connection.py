@@ -128,43 +128,67 @@ class TronHTTPClient:
             logger.error(f"Error getting transaction: {e}")
             return {}
 
-
-def get_connection(network: str = "mainnet") -> TronHTTPClient:
+def get_connection(
+    network: str = "mainnet",
+    rpc_url: Optional[str] = None,
+) -> TronHTTPClient:
     """
     Get a TRON connection.
 
     Parameters
     ----------
     network : str
-        'mainnet', 'shasta', or 'nile'
+        Network name ("mainnet", "shasta", "nile").
+
+    rpc_url : str, optional
+        Custom TRON RPC endpoint.
 
     Returns
     -------
     TronHTTPClient
-        TRON client instance.
+        Connected TRON client.
     """
-    # Try from environment first
-    rpc_url = os.getenv("TRON_RPC_URL")
 
-    if not rpc_url:
-        rpc_url = PUBLIC_ENDPOINTS.get(network, PUBLIC_ENDPOINTS["mainnet"])
+    ####################################################################
+    # Priority
+    #
+    # 1. Explicit rpc_url
+    # 2. Environment variable
+    # 3. Network default
+    ####################################################################
 
-    try:
-        logger.info(f"Connecting to TRON: {rpc_url}")
-        client = TronHTTPClient(rpc_url)
+    if rpc_url:
 
-        # Test connection
-        block = client.get_latest_block_number()
-        if block > 0:
-            logger.info(f"✅ Connected to TRON. Block: {block}")
-            return client
-        else:
-            raise ConnectionError(f"Failed to connect to TRON: {rpc_url}")
+        endpoint = rpc_url
 
-    except Exception as error:
-        logger.error(f"TRON connection error: {error}")
-        raise ConnectionError(f"Failed to connect to TRON: {error}")
+    else:
 
+        endpoint = os.getenv("TRON_RPC_URL")
+
+        if not endpoint:
+
+            endpoint = PUBLIC_ENDPOINTS.get(
+                network,
+                PUBLIC_ENDPOINTS["mainnet"],
+            )
+
+    logger.info(f"Connecting to TRON: {endpoint}")
+
+    client = TronHTTPClient(endpoint)
+
+    block = client.get_latest_block_number()
+
+    if block <= 0:
+
+        raise ConnectionError(
+            f"Failed to connect to TRON: {endpoint}"
+        )
+
+    logger.info(
+        f"✅ Connected to TRON. Block: {block}"
+    )
+
+    return client
 
 ###############################################################################
 # End of File

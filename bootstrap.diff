@@ -1,0 +1,441 @@
+--- core/bootstrap.py	2026-07-20 19:05:04.061022749 +0300
++++ core/core/bootstrap.py	2026-07-30 23:20:17.872273840 +0300
+@@ -1,365 +1,72 @@
+-"""
+-===============================================================================
+-Universal Blockchain Platform (UBP)
+-
+-Module
+-------
+-core.bootstrap
+-
+-Purpose
+--------
+-Application startup and dependency initialization.
+-
+-Responsible for:
+-
+-- Loading configuration
+-- Initializing blockchain providers
+-- Registering providers
+-- Preparing runtime services
+-
+-
+-Architecture
+-------------
+-UBP Enterprise Runtime Framework
+-
+-
+-Author
+-------
+-Jaramogi Diddy
+-
+-
+-Platform
+---------
+-Universal Blockchain Platform (UBP)
+-
+-
+-Version
+--------
+-2.0 Enterprise
+-===============================================================================
+-"""
+-
+-
+-from __future__ import annotations
+-
+-
+-
+-from providers.manager import ProviderManager
+-
+-from providers.factory import ProviderFactory
+-
+-from providers.base import BaseProvider
+-
+-
+-from config.settings import settings
+-
+-
+-from core.logger import get_logger
+-
+-
+-
+-logger = get_logger(__name__)
+-
+-
+-
+-
+-###############################################################################
+-# Bootstrap Manager
+-###############################################################################
+-
+-
+-class Bootstrap:
+-    """
+-    UBP application bootstrap manager.
+-
+-    Creates the initial runtime environment.
+-    """
+-
+-
+-
+-    ###########################################################################
+-    # Construction
+-    ###########################################################################
+-
+-    def __init__(self) -> None:
+-
+-        self.provider_manager = (
+-            ProviderManager()
+-        )
+-
+-
+-        self.initialized = False
+-
+-
+-        logger.info(
+-            "UBP Bootstrap created."
+-        )
+-
+-
+-
+-    ###########################################################################
+-    # Provider Initialization
+-    ###########################################################################
+-
+-    def initialize_providers(
+-        self
+-    ) -> ProviderManager:
+-        """
+-        Initialize blockchain providers.
+-
+-        Creates:
+-
+-        - Primary provider
+-        - Backup provider
+-
+-        Returns
+-        -------
+-        ProviderManager
+-        """
+-
+-        logger.info(
+-            "Initializing blockchain providers..."
+-        )
+-    
+-        #######################################################################
+-        # Create Primary Provider
+-        #######################################################################
+-
+-        try:
+-
+-            primary_provider = (
+-                ProviderFactory.create(
+-                    settings.PRIMARY_PROVIDER,
+-                    {
+-                        "api_key":
+-                            settings.ALCHEMY_API_KEY,
+-
+-                        "project_id":
+-                            settings.INFURA_PROJECT_ID,
+-
+-                        "network":
+-                            settings.ALCHEMY_NETWORK,
+-                    },
+-                )
+-            )
+-
+-
+-            self.provider_manager.register_provider(
+-                settings.PRIMARY_PROVIDER,
+-                primary_provider,
+-                default=True,
+-            )
+-
+-
+-            logger.info(
+-                "Primary provider initialized: %s",
+-                settings.PRIMARY_PROVIDER,
+-            )
+-
+-
+-        except Exception as error:
+-
+-            logger.error(
+-                "Primary provider initialization failed: %s",
+-                error,
+-            )
+-
+-
+-
+-        #######################################################################
+-        # Create Backup Provider
+-        #######################################################################
+-
+-        try:
+-
+-            backup_provider = (
+-                ProviderFactory.create(
+-                    settings.BACKUP_PROVIDER,
+-                    {
+-                        "api_key":
+-                            settings.ALCHEMY_API_KEY,
+-
+-                        "project_id":
+-                            settings.INFURA_PROJECT_ID,
+-
+-                        "network":
+-                            settings.INFURA_NETWORK,
+-                    },
+-                )
+-            )
+-
+-
+-            self.provider_manager.register_provider(
+-                settings.BACKUP_PROVIDER,
+-                backup_provider,
+-            )
+-
+-
+-            logger.info(
+-                "Backup provider initialized: %s",
+-                settings.BACKUP_PROVIDER,
+-            )
+-
+-
+-        except Exception as error:
+-
+-            logger.warning(
+-                "Backup provider initialization failed: %s",
+-                error,
+-            )
+-
+-
+-
+-        #######################################################################
+-        # Configure Failover
+-        #######################################################################
+-
+-        self.provider_manager.enable_failover(
+-            settings.AUTO_FAILOVER
+-        )
+-
+-
+-
+-        self.initialized = True
+-
+-
+-
+-        logger.info(
+-            "Provider initialization complete."
+-        )
+-
+-
+-        return self.provider_manager
+-    
+-    ###########################################################################
+-    # Runtime Access
+-    ###########################################################################
+-
+-    def get_provider(
+-        self,
+-    ) -> BaseProvider:
+-        """
+-        Return the active blockchain provider.
+-
+-        Returns
+-        -------
+-        BaseProvider
+-            Active provider instance.
+-        """
+-
+-        if not self.initialized:
+-
+-            raise RuntimeError(
+-                "UBP has not been initialized."
+-            )
+-
+-
+-        return (
+-            self.provider_manager
+-            .get_active_provider()
+-        )
+-
+-
+-
+-    ###########################################################################
+-    # Startup
+-    ###########################################################################
+-
+-    def start(
+-        self,
+-    ) -> ProviderManager:
+-        """
+-        Start UBP runtime.
+-
+-        Returns
+-        -------
+-        ProviderManager
+-            Initialized provider manager.
+-        """
+-
+-        logger.info(
+-            "Starting Universal Blockchain Platform..."
+-        )
+-
+-
+-        if not settings.validate():
+-
+-            raise RuntimeError(
+-                "Invalid UBP configuration."
+-            )
+-
+-
+-        return (
+-            self.initialize_providers()
+-        )
+-
+-
+-
+-    ###########################################################################
+-    # Shutdown
+-    ###########################################################################
+-
+-    def shutdown(
+-        self,
+-    ) -> None:
+-        """
+-        Shutdown UBP runtime.
+-
+-        Releases provider resources.
+-        """
+-
+-        logger.info(
+-            "Shutting down UBP..."
+-        )
+-
+-
+-        self.provider_manager.close_all()
+-
+-
+-        self.initialized = False
+-
+-
+-
+-        logger.info(
+-            "UBP shutdown complete."
+-        )
+-
+-
+-
+-    ###########################################################################
+-    # Context Manager Support
+-    ###########################################################################
+-
+-    def __enter__(
+-        self,
+-    ) -> "Bootstrap":
+-
+-        self.start()
+-
+-        return self
+-
+-
+-
+-    def __exit__(
+-        self,
+-        exc_type,
+-        exc_value,
+-        traceback,
+-    ) -> None:
+-
+-        self.shutdown()
+-
+-
+-
+-###############################################################################
+-# Global Bootstrap Instance
+-###############################################################################
+-
+-
+-bootstrap = Bootstrap()
+-
+-
+-
+-###############################################################################
+-# End of File
+-###############################################################################
++"""
++core/bootstrap.py
++
++Universal Blockchain Platform (UBP)
++
++Application bootstrapper.
++
++Responsible for initializing the platform and wiring together
++core components.
++"""
++
++from __future__ import annotations
++
++from providers.alchemy import AlchemyProvider
++from providers.factory import ProviderFactory
++from providers.infura import InfuraProvider
++from providers.manager import ProviderManager
++from providers.registry import ProviderRegistry
++from providers.tron import TronProvider
++
++
++def create_provider_registry() -> ProviderRegistry:
++    """
++    Create and populate the provider registry.
++    """
++
++    registry = ProviderRegistry()
++
++    registry.register("alchemy", AlchemyProvider)
++    registry.register("infura", InfuraProvider)
++    registry.register("tron", TronProvider)
++
++    return registry
++
++
++def create_provider_factory(
++    registry: ProviderRegistry,
++) -> ProviderFactory:
++    """
++    Create the provider factory.
++    """
++
++    return ProviderFactory(registry)
++
++
++def create_provider_manager(
++    factory: ProviderFactory,
++) -> ProviderManager:
++    """
++    Create the provider manager.
++    """
++
++    return ProviderManager(factory)
++
++
++def bootstrap() -> ProviderManager:
++    """
++    Bootstrap the provider subsystem.
++
++    Returns
++    -------
++    ProviderManager
++        Fully initialized provider manager.
++    """
++
++    registry = create_provider_registry()
++
++    factory = create_provider_factory(registry)
++
++    manager = create_provider_manager(factory)
++
++    return manager
+\ No newline at end of file

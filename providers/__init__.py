@@ -15,25 +15,18 @@ all blockchain connectivity providers.
 
 Architecture
 ------------
-    ┌─────────────────────────────────────────────┐
-    │           ProviderManager                   │
-    │  (Orchestration, Failover, Health)         │
-    └─────────────────────────────────────────────┘
-                        │
-    ┌─────────────────────────────────────────────┐
-    │            ProviderFactory                  │
-    │  (Instantiation, Configuration)            │
-    └─────────────────────────────────────────────┘
-                        │
-    ┌─────────────────────────────────────────────┐
-    │           ProviderRegistry                  │
-    │  (Registration, Discovery)                 │
-    └─────────────────────────────────────────────┘
-                        │
-    ┌─────────────────────────────────────────────┐
-    │              BaseProvider                   │
-    │  (Abstract Contract)                       │
-    └─────────────────────────────────────────────┘
+
+    ProviderManager
+    (Orchestration, Failover, Health)
+            |
+    ProviderFactory
+    (Instantiation, Configuration)
+            |
+    ProviderRegistry
+    (Registration, Discovery)
+            |
+    BaseProvider
+    (Abstract Contract)
 
 Author
 ------
@@ -49,7 +42,16 @@ Version
 ===============================================================================
 """
 
-from providers.base import BaseProvider, ProviderStatus, ProviderType
+from __future__ import annotations
+
+from core.logger import get_logger
+
+from providers.base import (
+    BaseProvider,
+    ProviderStatus,
+    ProviderType,
+)
+
 from providers.exceptions import (
     ProviderError,
     ProviderConfigurationError,
@@ -63,30 +65,76 @@ from providers.exceptions import (
     ProviderUnsupportedOperationError,
     DuplicateRegistrationError,
 )
+
 from providers.registry import ProviderRegistry
 from providers.factory import ProviderFactory
 from providers.manager import ProviderManager
 
-# Register all providers
 from providers.alchemy import AlchemyProvider
 from providers.infura import InfuraProvider
 from providers.local import LocalProvider
 from providers.public import PublicProvider
 from providers.tron import TronProvider
+from providers.bitcoin import BitcoinProvider
 
-# Auto-register providers
-ProviderRegistry.register("alchemy", AlchemyProvider, alias=["alch"])
-ProviderRegistry.register("infura", InfuraProvider)
-ProviderRegistry.register("local", LocalProvider)
-ProviderRegistry.register("public", PublicProvider, alias=["publicnode"])
-ProviderRegistry.register("tron", TronProvider)
 
+logger = get_logger(__name__)
+
+
+###############################################################################
+# Provider Registration
+###############################################################################
+
+if not ProviderRegistry.contains("alchemy"):
+    ProviderRegistry.register(
+        "alchemy",
+        AlchemyProvider,
+        alias=["alch"],
+    )
+
+if not ProviderRegistry.contains("infura"):
+    ProviderRegistry.register(
+        "infura",
+        InfuraProvider,
+    )
+
+if not ProviderRegistry.contains("local"):
+    ProviderRegistry.register(
+        "local",
+        LocalProvider,
+    )
+
+if not ProviderRegistry.contains("public"):
+    ProviderRegistry.register(
+        "public",
+        PublicProvider,
+        alias=["publicnode"],
+    )
+
+if not ProviderRegistry.contains("tron"):
+    ProviderRegistry.register(
+        "tron",
+        TronProvider,
+    )
+
+if not ProviderRegistry.contains("bitcoin"):
+    ProviderRegistry.register(
+        "bitcoin",
+        BitcoinProvider,
+    )
+
+
+###############################################################################
+# Public API
+###############################################################################
 
 __all__ = [
+
     # Base
     "BaseProvider",
     "ProviderStatus",
     "ProviderType",
+
     # Exceptions
     "ProviderError",
     "ProviderConfigurationError",
@@ -99,112 +147,146 @@ __all__ = [
     "ProviderHealthCheckError",
     "ProviderUnsupportedOperationError",
     "DuplicateRegistrationError",
+
     # Core
     "ProviderRegistry",
     "ProviderFactory",
     "ProviderManager",
+
     # Providers
     "AlchemyProvider",
     "InfuraProvider",
     "LocalProvider",
     "PublicProvider",
     "TronProvider",
+    "BitcoinProvider",
+
 ]
 
 
 ###############################################################################
-# Convenience Functions
+# Global Provider Factory
 ###############################################################################
 
-# Global factory instance
-_factory: ProviderFactory = None
+_factory: ProviderFactory | None = None
 
+_provider_cache: dict[str, BaseProvider] = {}
+
+
+###############################################################################
+# Factory Helpers
+###############################################################################
 
 def get_factory() -> ProviderFactory:
-    """Get the global provider factory instance."""
+    """
+    Return the global provider factory.
+    """
+
     global _factory
+
     if _factory is None:
+
+        logger.info(
+            "Creating global ProviderFactory."
+        )
+
         _factory = ProviderFactory()
+
     return _factory
 
 
-def get_provider(name: str = None, **kwargs) -> BaseProvider:
+###############################################################################
+# Provider Helpers
+###############################################################################
+
+def get_provider(
+    name: str | None = None,
+    **kwargs,
+) -> BaseProvider:
     """
-    Get a provider instance by name.
+    Return a provider instance.
 
-    Parameters
-    ----------
-    name : str, optional
-        Provider name. If None, returns the first registered provider.
-    **kwargs : Any
-        Provider-specific configuration.
-
-    Returns
-    -------
-    BaseProvider
-        Provider instance.
-
-    Raises
-    ------
-    ProviderNotFoundError
-        If the provider is not found.
+    Cached providers are reused.
     """
+
+    global _provider_cache
+
     factory = get_factory()
-    return factory.get_provider(name, **kwargs)
+
+    if name is None:
+
+        providers = factory.supported_providers()
+
+        if not providers:
+
+            raise ProviderNotFoundError(
+                "No providers registered."
+            )
+
+        name = providers[0]
+
+    name = name.strip().lower()
+
+    if name in _provider_cache:
+
+        logger.debug(
+            "Returning cached provider '%s'.",
+            name,
+        )
+
+        return _provider_cache[name]
+
+    logger.info(
+        "Creating provider '%s'.",
+        name,
+    )
+
+    provider = factory.create_by_name(
+        name,
+        **kwargs,
+    )
+
+    _provider_cache[name] = provider
+
+    return provider
 
 
-def get_web3(name: str = None):
+def get_web3(
+    name: str | None = None,
+):
     """
-    Get a Web3 instance from a provider.
-
-    Parameters
-    ----------
-    name : str, optional
-        Provider name. If None, uses the default provider.
-
-    Returns
-    -------
-    Web3
-        Web3 instance.
-
-    Raises
-    ------
-    ProviderNotFoundError
-        If the provider is not found.
+    Return the provider's Web3 instance.
     """
+
     provider = get_provider(name)
+
     return provider.web3
 
 
-def create_provider(provider_type: str, **kwargs) -> BaseProvider:
+def create_provider(
+    provider_type: str,
+    **kwargs,
+) -> BaseProvider:
     """
-    Create a provider instance.
-
-    Parameters
-    ----------
-    provider_type : str
-        Provider type.
-    **kwargs : Any
-        Provider-specific configuration.
-
-    Returns
-    -------
-    BaseProvider
-        Provider instance.
+    Create a provider without caching.
     """
-    factory = get_factory()
-    return factory.create_by_name(provider_type, **kwargs)
+
+    logger.info(
+        "Creating provider '%s'.",
+        provider_type,
+    )
+
+    return get_factory().create_by_name(
+        provider_type,
+        **kwargs,
+    )
 
 
 def get_default_provider() -> BaseProvider:
     """
-    Get the default provider.
-
-    Returns
-    -------
-    BaseProvider
-        Default provider instance.
+    Return the default provider.
     """
+
     return get_provider()
 
 

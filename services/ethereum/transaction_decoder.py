@@ -27,34 +27,30 @@ This module does NOT:
 - Sign transactions
 - Manage private keys
 
-
 Architecture
 ------------
 
-Ethereum RPC Provider
-          |
-          ▼
-EthereumTransactionService
-          |
-          ▼
-EthereumTransactionDecoder
-          |
-          ▼
-EthereumTransaction Model
-          |
-          ▼
-Reports / APIs / Analytics
-
+    Ethereum RPC Provider
+              |
+              ▼
+    EthereumTransactionService
+              |
+              ▼
+    EthereumTransactionDecoder
+              |
+              ▼
+    EthereumTransaction Model
+              |
+              ▼
+    Reports / APIs / Analytics
 
 Author
 ------
 Jaramogi Diddy
 
-
 Platform
 --------
 Universal Blockchain Platform (UBP)
-
 
 Version
 -------
@@ -62,25 +58,12 @@ Version
 ===============================================================================
 """
 
-
 from __future__ import annotations
 
-
-###############################################################################
-# Imports
-###############################################################################
-
-import logging
-
-
 from decimal import Decimal
-
-
 from typing import Any
-from typing import Dict
-from typing import Optional
-from typing import Tuple
 
+from core.logger import get_logger
 
 from models.ethereum.transaction import (
     EthereumGasInfo,
@@ -89,7 +72,6 @@ from models.ethereum.transaction import (
     EthereumTransactionReceipt,
     create_ethereum_transaction,
 )
-
 
 from models.transaction import (
     TransactionFee,
@@ -100,13 +82,11 @@ from models.transaction import (
 )
 
 
-
 ###############################################################################
 # Logger
 ###############################################################################
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 
 
 ###############################################################################
@@ -119,10 +99,8 @@ class EthereumTransactionDecoder:
     Converts raw Ethereum blockchain data into UBP Ethereum transaction models.
     """
 
-
-
     ###########################################################################
-    # Constructor
+    # Construction
     ###########################################################################
 
     def __init__(
@@ -134,32 +112,24 @@ class EthereumTransactionDecoder:
 
         Parameters
         ----------
-        network:
+        network : str
             Ethereum network name.
         """
 
-
         self.network = network
-
 
         logger.info(
             "EthereumTransactionDecoder initialized for %s network.",
             network,
         )
 
-
-
-###############################################################################
-# End Part 1
-###############################################################################
-###############################################################################
-# Status Mapping
-###############################################################################
-
+    ###########################################################################
+    # Status Mapping
+    ###########################################################################
 
     def decode_status(
         self,
-        receipt_status: Optional[int],
+        receipt_status: int | None,
     ) -> TransactionStatus:
         """
         Convert Ethereum receipt status into UBP transaction status.
@@ -168,37 +138,39 @@ class EthereumTransactionDecoder:
             1 = success
             0 = failed
             None = pending/unavailable
+
+        Parameters
+        ----------
+        receipt_status : int | None
+            Ethereum receipt status.
+
+        Returns
+        -------
+        TransactionStatus
+            UBP transaction status.
         """
 
-
         if receipt_status == 1:
-
             return TransactionStatus.CONFIRMED
 
-
         if receipt_status == 0:
-
             return TransactionStatus.FAILED
-
 
         return TransactionStatus.PENDING
 
-
-
-###############################################################################
-# Transaction Type Detection
-###############################################################################
-
+    ###########################################################################
+    # Transaction Type Detection
+    ###########################################################################
 
     def detect_transaction_type(
         self,
-        transaction: Dict[str, Any],
+        transaction: dict[str, Any],
     ) -> TransactionType:
         """
         Determine Ethereum transaction type.
 
-        Rules:
-
+        Rules
+        -----
         No receiver:
             Contract creation
 
@@ -207,48 +179,46 @@ class EthereumTransactionDecoder:
 
         Input data:
             Contract interaction
+
+        Parameters
+        ----------
+        transaction : dict[str, Any]
+            Raw Ethereum transaction.
+
+        Returns
+        -------
+        TransactionType
+            Detected transaction type.
         """
 
-
         receiver = transaction.get(
-            "to"
+            "to",
         )
-
 
         input_data = transaction.get(
             "input",
             "0x",
         )
 
-
         if receiver is None:
-
             return TransactionType.CONTRACT_CREATION
-
-
 
         if input_data in (
             "",
             "0x",
             b"",
         ):
-
             return TransactionType.TRANSFER
-
-
 
         return TransactionType.CONTRACT_CALL
 
-
-###############################################################################
-###############################################################################
-# Participant Creation
-###############################################################################
-
+    ###########################################################################
+    # Participant Creation
+    ###########################################################################
 
     def create_participant(
         self,
-        address: Optional[str],
+        address: str | None,
         role: str,
     ) -> TransactionParticipant:
         """
@@ -256,311 +226,238 @@ class EthereumTransactionDecoder:
 
         Parameters
         ----------
-        address:
+        address : str | None
             Ethereum wallet address.
 
-        role:
+        role : str
             Participant role.
 
         Returns
         -------
         TransactionParticipant
+            Transaction participant.
         """
 
-
         if address is None:
-
             address = "CONTRACT_CREATION"
 
-
-
         return TransactionParticipant(
-
             address=address,
-
             role=role,
-
             network=self.network,
-
         )
 
-###############################################################################
-# Gas Decoding
-###############################################################################
 
+###############################################################################
+# End of Part 1
+###############################################################################
+    ###########################################################################
+    # Gas Decoding
+    ###########################################################################
 
     def decode_gas(
         self,
-        transaction: Dict[str, Any],
-        receipt: Optional[
-            Dict[str, Any]
-        ] = None,
+        transaction: dict[str, Any],
+        receipt: dict[str, Any] | None = None,
     ) -> EthereumGasInfo:
         """
-        Convert raw Ethereum gas fields into
+        Convert raw Ethereum gas fields into an
         EthereumGasInfo model.
+
+        Parameters
+        ----------
+        transaction : dict[str, Any]
+            Raw Ethereum transaction.
+
+        receipt : dict[str, Any] | None
+            Optional Ethereum transaction receipt.
+
+        Returns
+        -------
+        EthereumGasInfo
+            Decoded gas information.
         """
 
-
         return EthereumGasInfo(
-
             gas_limit=transaction.get(
                 "gas",
                 0,
             ),
 
-
             gas_used=(
-
                 receipt.get(
-                    "gasUsed"
+                    "gasUsed",
                 )
-
                 if receipt
-
                 else None
-
             ),
-
 
             gas_price=transaction.get(
-                "gasPrice"
+                "gasPrice",
             ),
-
 
             max_fee_per_gas=transaction.get(
-                "maxFeePerGas"
+                "maxFeePerGas",
             ),
-
 
             max_priority_fee_per_gas=transaction.get(
-                "maxPriorityFeePerGas"
+                "maxPriorityFeePerGas",
             ),
-
 
             effective_gas_price=(
-
                 receipt.get(
-                    "effectiveGasPrice"
+                    "effectiveGasPrice",
                 )
-
                 if receipt
-
                 else None
-
             ),
-
         )
 
-
-
-###############################################################################
-# End Part 2
-###############################################################################
-###############################################################################
-# Transaction Decoder
-###############################################################################
-
+    ###########################################################################
+    # Transaction Decoder
+    ###########################################################################
 
     def decode_transaction(
         self,
-        transaction: Dict[str, Any],
-        receipt: Optional[
-            Dict[str, Any]
-        ] = None,
+        transaction: dict[str, Any],
+        receipt: dict[str, Any] | None = None,
     ) -> EthereumTransaction:
         """
-        Convert raw Ethereum transaction data
-        into a UBP EthereumTransaction object.
+        Convert raw Ethereum transaction data into
+        a UBP EthereumTransaction object.
 
         Parameters
         ----------
-        transaction:
+        transaction : dict[str, Any]
             Raw transaction dictionary from Web3.
 
-        receipt:
+        receipt : dict[str, Any] | None
             Optional transaction receipt.
 
         Returns
         -------
         EthereumTransaction
+            Decoded UBP Ethereum transaction.
         """
-
 
         logger.info(
             "Decoding Ethereum transaction %s",
             transaction.get("hash"),
         )
 
-
         #######################################################################
-        # Basic fields
+        # Basic Fields
         #######################################################################
-
 
         tx_hash = transaction.get(
-            "hash"
+            "hash",
         )
-
 
         if hasattr(
             tx_hash,
-            "hex"
+            "hex",
         ):
-
             tx_hash = tx_hash.hex()
 
-
         sender = self.create_participant(
-
             transaction.get(
-                "from"
+                "from",
             ),
-
             role="SENDER",
-
         )
-
 
         receiver = self.create_participant(
-
             transaction.get(
-                "to"
+                "to",
             ),
-
             role="RECEIVER",
-
         )
 
         #######################################################################
-        # Transaction classification
+        # Transaction Classification
         #######################################################################
 
-
         transaction_type = self.detect_transaction_type(
-
-            transaction
-
+            transaction,
         )
 
         #######################################################################
         # Status
         #######################################################################
 
-
         receipt_status = None
 
-
         if receipt:
-
             receipt_status = receipt.get(
-                "status"
+                "status",
             )
 
-
         status = self.decode_status(
-
-            receipt_status
-
+            receipt_status,
         )
 
         #######################################################################
         # Gas
         #######################################################################
 
-
         gas = self.decode_gas(
-
             transaction,
-
             receipt,
-
         )
 
-
         #######################################################################
-        # Receipt decoding
+        # Receipt Decoding
         #######################################################################
-
 
         decoded_receipt = None
 
-
         if receipt:
-
-
             decoded_receipt = self.decode_receipt(
-
-                receipt
-
+                receipt,
             )
-
-
 
         #######################################################################
         # Metadata
         #######################################################################
 
-
         metadata = TransactionMetadata(
-
             data={
+                "input": transaction.get(
+                    "input",
+                    "0x",
+                ),
 
-                "input":
-
-                    transaction.get(
-                        "input",
-                        "0x",
-                    ),
-
-
-                "block_number":
-
-                    transaction.get(
-                        "blockNumber"
-                    ),
-
+                "block_number": transaction.get(
+                    "blockNumber",
+                ),
             }
-
         )
 
         #######################################################################
         # Fee
         #######################################################################
 
-
         fee = None
 
-
-        if gas.gas_used and gas.effective_gas_price:
-
+        if (
+            gas.gas_used
+            and gas.effective_gas_price
+        ):
 
             fee = TransactionFee(
-
                 amount=Decimal(
-
                     gas.gas_used
-
                     *
-
                     gas.effective_gas_price
-
                 ),
-
-
                 asset="ETH",
-
             )
-
-
 
         #######################################################################
         # Build Ethereum Model
         #######################################################################
 
-
         return create_ethereum_transaction(
-
             tx_hash=tx_hash,
 
             network=self.network,
@@ -570,98 +467,82 @@ class EthereumTransactionDecoder:
             receiver=receiver,
 
             amount=Decimal(
-
                 transaction.get(
                     "value",
                     0,
                 )
-
             ),
-
 
             asset="ETH",
 
-
             status=status,
 
-
             transaction_type=transaction_type,
-
 
             nonce=transaction.get(
                 "nonce",
                 0,
             ),
 
-
             chain_id=transaction.get(
                 "chainId",
                 1,
             ),
 
-
             gas=gas,
 
-
             input_data=transaction.get(
-
                 "input",
-
                 "0x",
-
             ),
-
 
             contract_address=(
-
                 receipt.get(
-                    "contractAddress"
+                    "contractAddress",
                 )
-
                 if receipt
-
                 else None
-
             ),
-
 
             fee=fee,
 
-
             metadata=metadata,
 
-
             receipt=decoded_receipt,
-
         )
 
 
-
 ###############################################################################
-# End Part 3
+# End of Part 2
 ###############################################################################
-###############################################################################
-# Receipt Decoder
-###############################################################################
-
-
-    ###############################################################################
-# Receipt Decoder
-###############################################################################
-
+    ###########################################################################
+    # Receipt Decoder
+    ###########################################################################
 
     def decode_receipt(
         self,
-        receipt: Dict[str, Any],
+        receipt: dict[str, Any],
     ) -> EthereumTransactionReceipt:
         """
-        Convert raw Ethereum receipt into
+        Convert raw Ethereum receipt into a
         UBP EthereumTransactionReceipt model.
+
+        Parameters
+        ----------
+        receipt : dict[str, Any]
+            Raw Ethereum transaction receipt.
+
+        Returns
+        -------
+        EthereumTransactionReceipt
+            Decoded transaction receipt.
         """
 
+        logs: list[EthereumTransactionLog] = []
 
-        logs = []
-
+        #######################################################################
+        # Decode Event Logs
+        #######################################################################
 
         for log in receipt.get(
             "logs",
@@ -669,184 +550,163 @@ class EthereumTransactionDecoder:
         ):
 
             logs.append(
-
                 self.decode_log(
-                    log
+                    log,
                 )
-
             )
 
+        #######################################################################
+        # Build Receipt Model
+        #######################################################################
 
         return EthereumTransactionReceipt(
-
             block_number=receipt.get(
-                "blockNumber"
+                "blockNumber",
             ),
-
 
             block_hash=(
-
                 receipt.get(
-                    "blockHash"
+                    "blockHash",
                 ).hex()
-
                 if hasattr(
                     receipt.get(
-                        "blockHash"
+                        "blockHash",
                     ),
-                    "hex"
+                    "hex",
                 )
-
                 else receipt.get(
-                    "blockHash"
+                    "blockHash",
                 )
-
             ),
-
 
             transaction_index=receipt.get(
-                "transactionIndex"
+                "transactionIndex",
             ),
-
 
             status=receipt.get(
-                "status"
+                "status",
             ),
-
 
             gas_used=receipt.get(
-                "gasUsed"
+                "gasUsed",
             ),
-
 
             cumulative_gas_used=receipt.get(
-                "cumulativeGasUsed"
+                "cumulativeGasUsed",
             ),
-
 
             contract_address=receipt.get(
-                "contractAddress"
+                "contractAddress",
             ),
-
 
             logs=tuple(
-                logs
+                logs,
             ),
-
         )
 
-
-################################################################################
-# Log Decoder
-###############################################################################
-
+    ###########################################################################
+    # Log Decoder
+    ###########################################################################
 
     def decode_log(
         self,
-        log: Dict[str, Any],
+        log: dict[str, Any],
     ) -> EthereumTransactionLog:
         """
-        Convert Ethereum event log into
+        Convert Ethereum event log into a
         UBP EthereumTransactionLog model.
+
+        Parameters
+        ----------
+        log : dict[str, Any]
+            Raw Ethereum event log.
+
+        Returns
+        -------
+        EthereumTransactionLog
+            Decoded event log.
         """
 
-
         return EthereumTransactionLog(
-
             address=log.get(
                 "address",
             ),
 
-
             topics=tuple(
-
                 topic.hex()
-
                 if hasattr(
                     topic,
                     "hex",
                 )
-
                 else topic
-
                 for topic in log.get(
                     "topics",
                     [],
                 )
-
             ),
-
 
             data=log.get(
                 "data",
                 "0x",
             ),
-
         )
 
-
-###############################################################################
-# Batch Helpers
-###############################################################################
-
+    ###########################################################################
+    # Batch Helpers
+    ###########################################################################
 
     def decode_transactions(
         self,
-        transactions: list[
-            Dict[str, Any]
-        ],
+        transactions: list[dict[str, Any]],
     ) -> list[EthereumTransaction]:
         """
         Decode multiple Ethereum transactions.
+
+        Parameters
+        ----------
+        transactions : list[dict[str, Any]]
+            Raw Ethereum transaction objects.
+
+        Returns
+        -------
+        list[EthereumTransaction]
+            Decoded Ethereum transactions.
         """
 
-
         return [
-
             self.decode_transaction(
-                tx
+                tx,
             )
-
             for tx in transactions
-
         ]
 
-
-
-###############################################################################
-# Representation
-###############################################################################
-
+    ###########################################################################
+    # Representation
+    ###########################################################################
 
     def __repr__(
         self,
     ) -> str:
+        """
+        Return a developer-friendly representation.
+        """
 
         return (
-
             f"{self.__class__.__name__}("
-
-            f"network={self.network}"
-
+            f"network={self.network!r}"
             ")"
-
         )
-
 
 
 ###############################################################################
 # Public Exports
 ###############################################################################
 
-
 __all__ = [
-
     "EthereumTransactionDecoder",
-
 ]
 
 
-
 ###############################################################################
-# End Module
+# End of Module
 ###############################################################################

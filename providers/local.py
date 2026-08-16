@@ -8,14 +8,15 @@ providers.local
 
 Purpose
 -------
-Enterprise implementation for self-hosted nodes.
+Enterprise implementation for self-hosted blockchain nodes.
 
-Supports:
-    • Geth
-    • Erigon
-    • Besu
-    • Nethermind
-    • Other Ethereum-compatible nodes
+Supports
+--------
+• Geth
+• Erigon
+• Besu
+• Nethermind
+• Other Ethereum-compatible nodes
 
 Author
 ------
@@ -34,18 +35,39 @@ Version
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
 
-from providers.base import BaseProvider, ProviderType
-from providers.exceptions import ProviderConfigurationError
+from typing import Any
+
 from core.logger import get_logger
+
+from providers.base import (
+    BaseProvider,
+    ProviderType,
+)
+from providers.exceptions import (
+    ProviderConfigurationError,
+)
 
 logger = get_logger(__name__)
 
 
+###############################################################################
+# Provider Constants
+###############################################################################
+
+_BLOCKCHAIN = "ethereum"
+_PROVIDER_PREFIX = "local"
+
+_DEFAULT_HTTP_URL = "http://localhost:8545"
+_DEFAULT_WS_URL = "ws://localhost:8546"
+
+
 class LocalProvider(BaseProvider):
     """
-    Enterprise self-hosted node provider.
+    Enterprise self-hosted blockchain provider.
+
+    Supports Ethereum-compatible execution clients including
+    Geth, Erigon, Besu and Nethermind.
     """
 
     ###########################################################################
@@ -54,23 +76,45 @@ class LocalProvider(BaseProvider):
 
     def __init__(
         self,
-        http_url: Optional[str] = None,
-        ws_url: Optional[str] = None,
+        http_url: str | None = None,
+        ws_url: str | None = None,
         network: str = "mainnet",
         node_type: str = "geth",
     ) -> None:
+        """
+        Initialize a local blockchain provider.
+
+        Parameters
+        ----------
+        http_url : str | None
+            HTTP RPC endpoint.
+
+        ws_url : str | None
+            WebSocket RPC endpoint.
+
+        network : str
+            Blockchain network.
+
+        node_type : str
+            Local execution client.
+        """
+
         super().__init__()
 
         self._http_url = (
             http_url
-            or
-            os.getenv("LOCAL_RPC_URL", "http://localhost:8545")
+            or os.getenv(
+                "LOCAL_RPC_URL",
+                _DEFAULT_HTTP_URL,
+            )
         )
 
         self._ws_url = (
             ws_url
-            or
-            os.getenv("LOCAL_WS_URL", "ws://localhost:8546")
+            or os.getenv(
+                "LOCAL_WS_URL",
+                _DEFAULT_WS_URL,
+            )
         )
 
         self._network = network.lower()
@@ -84,18 +128,37 @@ class LocalProvider(BaseProvider):
 
     @property
     def name(self) -> str:
-        return f"local-{self._node_type}"
+        """
+        Provider name.
+        """
+        return f"{_PROVIDER_PREFIX}-{self._node_type}"
+
+    @property
+    def provider(self) -> str:
+        """
+        Human-readable provider name.
+        """
+        return f"Local ({self._node_type})"
 
     @property
     def blockchain(self) -> str:
-        return "ethereum"
+        """
+        Supported blockchain.
+        """
+        return _BLOCKCHAIN
 
     @property
     def network(self) -> str:
+        """
+        Configured blockchain network.
+        """
         return self._network
 
     @property
     def provider_type(self) -> ProviderType:
+        """
+        Provider type.
+        """
         return ProviderType.LOCAL
 
     ###########################################################################
@@ -104,21 +167,35 @@ class LocalProvider(BaseProvider):
 
     @property
     def http_url(self) -> str:
+        """
+        HTTP RPC endpoint.
+        """
         return self._http_url
 
     @property
     def ws_url(self) -> str:
+        """
+        WebSocket RPC endpoint.
+        """
         return self._ws_url
 
     ###########################################################################
     # Configuration Validation
     ###########################################################################
 
-    def _validate_configuration(self) -> None:
-        """Validate provider configuration."""
-        logger.debug("Validating local node configuration.")
+    def _validate_configuration(
+        self,
+    ) -> None:
+        """
+        Validate provider configuration.
+        """
+
+        logger.debug(
+            "Validating local node configuration."
+        )
 
         if not self._http_url:
+
             raise ProviderConfigurationError(
                 "Local node HTTP URL is required."
             )
@@ -129,39 +206,48 @@ class LocalProvider(BaseProvider):
 
     @property
     def supports_websocket(self) -> bool:
-        """Whether WebSocket connectivity is available."""
+        """
+        Whether WebSocket connectivity is available.
+        """
         return bool(self._ws_url)
 
     @property
     def supports_archive(self) -> bool:
-        """Whether archive data is supported."""
+        """
+        Local nodes support archive mode.
+        """
         return True
 
     @property
     def supports_debug_api(self) -> bool:
-        """Whether debug namespace is available."""
+        """
+        Whether the debug namespace is supported.
+        """
         return True
 
     @property
     def supports_trace_api(self) -> bool:
-        """Whether trace namespace is available."""
+        """
+        Whether the trace namespace is supported.
+        """
         return True
-
-    ###########################################################################
-    # Metadata
-    ###########################################################################
-
-    @property
-    def provider(self) -> str:
-        """Provider identifier."""
-        return f"Local ({self._node_type})"
 
     ###########################################################################
     # Provider Configuration
     ###########################################################################
 
-    def get_config(self) -> Dict[str, Any]:
-        """Return normalized provider configuration."""
+    def get_config(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Return normalized provider configuration.
+
+        Returns
+        -------
+        dict[str, Any]
+            Provider configuration.
+        """
+
         return {
             "provider": self.provider,
             "name": self.name,
@@ -176,21 +262,41 @@ class LocalProvider(BaseProvider):
                 "debug": self.supports_debug_api,
             },
         }
-
-    ###########################################################################
+        ###########################################################################
     # Diagnostics
     ###########################################################################
 
     def is_available(self) -> bool:
-        """Determine whether the provider is available."""
+        """
+        Determine whether the provider is available.
+
+        Returns
+        -------
+        bool
+            True if the provider passes a health check.
+        """
+
         try:
             return self.health_check()
-        except Exception as error:
-            logger.warning("Local node unavailable: %s", error)
+
+        except Exception:
+            logger.warning(
+                "Local node is unavailable."
+            )
             return False
 
-    def diagnostics(self) -> Dict[str, Any]:
-        """Return enterprise diagnostics."""
+    def diagnostics(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Return enterprise diagnostics.
+
+        Returns
+        -------
+        dict[str, Any]
+            Provider diagnostics.
+        """
+
         return {
             "provider": self.provider,
             "network": self.network,
@@ -200,11 +306,19 @@ class LocalProvider(BaseProvider):
             "latest_block": self.latest_block,
             "client_version": self.client_version,
             "latency_ms": self.statistics.last_latency_ms,
-            "average_latency_ms": self.statistics.average_latency,
-            "successful_connections": self.statistics.successful_connections,
-            "failed_connections": self.statistics.failed_connections,
+            "average_latency_ms": (
+                self.statistics.average_latency
+            ),
+            "successful_connections": (
+                self.statistics.successful_connections
+            ),
+            "failed_connections": (
+                self.statistics.failed_connections
+            ),
             "requests": self.statistics.requests,
-            "failed_requests": self.statistics.failed_requests,
+            "failed_requests": (
+                self.statistics.failed_requests
+            ),
         }
 
     ###########################################################################
@@ -212,36 +326,76 @@ class LocalProvider(BaseProvider):
     ###########################################################################
 
     def validate(self) -> bool:
-        """Perform a comprehensive provider validation."""
-        logger.info("Validating local node.")
+        """
+        Perform comprehensive provider validation.
+
+        Returns
+        -------
+        bool
+            True if the provider is fully operational.
+        """
+
+        logger.info(
+            "Validating local node provider."
+        )
 
         try:
             self._validate_configuration()
 
             if not self.health_check():
+
+                logger.error(
+                    "Health check failed."
+                )
+
                 return False
 
             if self.chain_id is None:
-                logger.error("Unable to retrieve chain ID.")
+
+                logger.error(
+                    "Unable to retrieve chain ID."
+                )
+
                 return False
 
             if self.latest_block is None:
-                logger.error("Unable to retrieve latest block.")
+
+                logger.error(
+                    "Unable to retrieve latest block."
+                )
+
                 return False
 
-            logger.info("Local node validation successful.")
+            logger.info(
+                "Local node validation successful."
+            )
+
             return True
 
-        except Exception as error:
-            logger.exception("Provider validation failed: %s", error)
+        except Exception:
+
+            logger.exception(
+                "Provider validation failed."
+            )
+
             return False
 
     ###########################################################################
     # Provider Information
     ###########################################################################
 
-    def provider_summary(self) -> Dict[str, Any]:
-        """Return a concise provider summary."""
+    def provider_summary(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Return a concise provider summary.
+
+        Returns
+        -------
+        dict[str, Any]
+            Provider summary.
+        """
+
         return {
             "provider": self.provider,
             "network": self.network,
@@ -257,9 +411,20 @@ class LocalProvider(BaseProvider):
     ###########################################################################
 
     def __str__(self) -> str:
-        return f"{self.provider} [{self._network}]"
+        """
+        Return a human-readable representation.
+        """
+
+        return (
+            f"{self.provider} "
+            f"[{self.network}]"
+        )
 
     def __repr__(self) -> str:
+        """
+        Return a developer representation.
+        """
+
         return (
             f"{self.__class__.__name__}("
             f"node_type='{self._node_type}', "
@@ -271,9 +436,17 @@ class LocalProvider(BaseProvider):
     # Cleanup
     ###########################################################################
 
-    def close(self) -> None:
-        """Release provider resources."""
-        logger.info("Closing local node provider.")
+    def close(
+        self,
+    ) -> None:
+        """
+        Release provider resources.
+        """
+
+        logger.info(
+            "Closing local node provider."
+        )
+
         super().close()
 
 

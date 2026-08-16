@@ -105,9 +105,9 @@ class DuplicateRegistrationError(ProviderError):
     pass
 
 
-class ProviderAlreadyRegisteredError(ProviderError):
+class ProviderAlreadyRegisteredError(DuplicateRegistrationError):
     """
-    Raised when attempting to register a provider that is already registered.
+    Backward-compatible alias for DuplicateRegistrationError.
     """
     pass
 

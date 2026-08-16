@@ -1,24 +1,63 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Module:
-    TRON Token Service
+Module
+------
+services.tron.token_service
 
-Purpose:
-    Business logic for TRON token operations.
+Purpose
+-------
+Business logic for TRON token operations.
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Responsibilities
+----------------
+• Validate TRC-20 token addresses
+• Retrieve TRC-20 metadata
+• Retrieve wallet token balances
+• Generate controller-friendly token reports
+
+Author
+------
+Jaramogi Diddy
+
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
 
-from typing import Dict, Any, Optional
+from __future__ import annotations
+
+from typing import Any
 
 from core.logger import get_logger
-from tron.contracts import is_trc20, get_trc20_metadata, get_trc20_balance
-from tron.wallets import is_valid_address
+
+from tron.contracts import (
+    get_trc20_balance,
+    get_trc20_metadata,
+    is_trc20,
+)
+
+from tron.wallets import (
+    is_valid_address,
+)
+
+
+###############################################################################
+# Logger
+###############################################################################
 
 logger = get_logger(__name__)
+
+
+###############################################################################
+# TRON Token Service
+###############################################################################
 
 
 class TronTokenService:
@@ -26,56 +65,184 @@ class TronTokenService:
     TRON token business logic service.
     """
 
-    def __init__(self):
-        logger.info("TronTokenService initialized.")
+    ###########################################################################
+    # Construction
+    ###########################################################################
 
-    def get_token_report(self, address: str, wallet_address: Optional[str] = None) -> Dict[str, Any]:
+    def __init__(
+        self,
+    ) -> None:
         """
-        Generate a token report.
+        Initialize the TRON Token Service.
+        """
+
+        logger.info(
+            "TronTokenService initialized."
+        )
+
+    ###########################################################################
+    # Token Report
+    ###########################################################################
+
+    def get_token_report(
+        self,
+        address: str,
+        wallet_address: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Generate a complete TRC-20 token report.
 
         Parameters
         ----------
         address : str
-            TRC-20 token address.
-        wallet_address : str, optional
-            Wallet address to check balance for.
+            TRC-20 contract address.
+
+        wallet_address : str | None
+            Wallet address for balance lookup.
 
         Returns
         -------
-        Dict[str, Any]
-            Token report.
+        dict[str, Any]
+            TRC-20 token report.
         """
-        logger.info(f"Generating token report for {address}")
 
-        if not is_valid_address(address):
-            return {
+        logger.info(
+            "Generating TRON token report for: %s",
+            address,
+        )
+
+        try:
+
+            ###################################################################
+            # Validate Address
+            ###################################################################
+
+            if not is_valid_address(
+                address,
+            ):
+
+                logger.warning(
+                    "Invalid TRON address: %s",
+                    address,
+                )
+
+                return {
+                    "address": address,
+                    "error": "Invalid TRON address",
+                    "is_valid": False,
+                }
+
+            ###################################################################
+            # Verify TRC-20 Token
+            ###################################################################
+
+            if not is_trc20(
+                address,
+            ):
+
+                logger.warning(
+                    "Address is not a TRC-20 token: %s",
+                    address,
+                )
+
+                return {
+                    "address": address,
+                    "is_token": False,
+                    "error": "Not a TRC-20 token",
+                }
+
+            ###################################################################
+            # Retrieve Metadata
+            ###################################################################
+
+            metadata = get_trc20_metadata(
+                address,
+            )
+
+            ###################################################################
+            # Build Token Report
+            ###################################################################
+
+            report: dict[str, Any] = {
                 "address": address,
-                "error": "Invalid TRON address",
-                "is_valid": False,
+
+                "is_token": True,
+
+                "name": metadata.get(
+                    "name",
+                    "Unknown",
+                ),
+
+                "symbol": metadata.get(
+                    "symbol",
+                    "Unknown",
+                ),
+
+                "decimals": metadata.get(
+                    "decimals",
+                    18,
+                ),
+
+                "total_supply": metadata.get(
+                    "total_supply",
+                    0,
+                ),
             }
 
-        is_trc20_token = is_trc20(address)
+            ###################################################################
+            # Optional Wallet Balance
+            ###################################################################
 
-        if not is_trc20_token:
-            return {
-                "address": address,
-                "is_token": False,
-                "error": "Not a TRC-20 token",
-            }
+            if wallet_address:
 
-        metadata = get_trc20_metadata(address)
+                try:
 
-        report = {
-            "address": address,
-            "is_token": True,
-            "name": metadata.get("name", "Unknown"),
-            "symbol": metadata.get("symbol", "Unknown"),
-            "decimals": metadata.get("decimals", 18),
-            "total_supply": metadata.get("total_supply", 0),
-        }
+                    report["balance"] = (
+                        get_trc20_balance(
+                            address,
+                            wallet_address,
+                        )
+                    )
 
-        if wallet_address:
-            balance = get_trc20_balance(address, wallet_address)
-            report["balance"] = balance
+                except Exception:
 
-        return report
+                    logger.exception(
+                        "Unable to retrieve TRC-20 balance."
+                    )
+
+                    report["balance"] = None
+
+            ###################################################################
+            # Return Report
+            ###################################################################
+
+            logger.info(
+                "TRON token report generated successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Failed to generate TRON token report."
+            )
+
+            raise
+
+
+###############################################################################
+# End of Part 1
+###############################################################################
+###############################################################################
+# Public Exports
+###############################################################################
+
+__all__ = [
+    "TronTokenService",
+]
+
+
+###############################################################################
+# End of File
+###############################################################################

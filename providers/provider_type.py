@@ -44,7 +44,8 @@ class ProviderType(str, Enum):
     # ---------------------------------------------------------
 
     CUSTOM = "custom"
-        # ---------------------------------------------------------
+
+    # ---------------------------------------------------------
     # Helper Methods
     # ---------------------------------------------------------
 
@@ -53,31 +54,42 @@ class ProviderType(str, Enum):
         """
         Return all provider type values.
 
-        Example:
-            ("web3", "rest", "websocket", ...)
+        Example
+        -------
+        ("web3", "rest", "websocket", ...)
         """
 
-        return tuple(member.value for member in cls)
+        return tuple(
+            member.value
+            for member in cls
+        )
 
     @classmethod
     def names(cls) -> tuple[str, ...]:
         """
         Return all provider type names.
 
-        Example:
-            ("WEB3", "REST", ...)
+        Example
+        -------
+        ("WEB3", "REST", ...)
         """
 
-        return tuple(member.name for member in cls)
+        return tuple(
+            member.name
+            for member in cls
+        )
 
     @classmethod
-    def has_value(cls, value: str) -> bool:
+    def has_value(
+        cls,
+        value: str,
+    ) -> bool:
         """
         Determine whether a provider type exists.
 
         Parameters
         ----------
-        value:
+        value : str
             Provider type value.
 
         Returns
@@ -85,12 +97,26 @@ class ProviderType(str, Enum):
         bool
         """
 
-        return value.lower() in cls.values()
+        normalized = value.strip().lower()
+
+        return normalized in cls.values()
 
     @classmethod
-    def from_value(cls, value: str) -> "ProviderType":
+    def from_value(
+        cls,
+        value: str,
+    ) -> "ProviderType":
         """
         Convert a string into a ProviderType.
+
+        Parameters
+        ----------
+        value : str
+            Provider type value.
+
+        Returns
+        -------
+        ProviderType
 
         Raises
         ------
@@ -101,22 +127,28 @@ class ProviderType(str, Enum):
         normalized = value.strip().lower()
 
         for member in cls:
+
             if member.value == normalized:
                 return member
 
-        raise ValueError(f"Unsupported provider type: '{value}'")
-        # ---------------------------------------------------------
+        raise ValueError(
+            f"Unsupported provider type: '{value}'"
+        )
+
+    # ---------------------------------------------------------
     # Serialization
     # ---------------------------------------------------------
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(
+        self,
+    ) -> dict[str, str]:
         """
         Serialize this provider type.
 
         Returns
         -------
-        dict
-            Dictionary representation of the provider type.
+        dict[str, str]
+            Dictionary representation.
         """
 
         return {
@@ -124,14 +156,18 @@ class ProviderType(str, Enum):
             "value": self.value,
         }
 
-    def __str__(self) -> str:
+    def __str__(
+        self,
+    ) -> str:
         """
         Return the provider type value.
         """
 
         return self.value
 
-    def __repr__(self) -> str:
+    def __repr__(
+        self,
+    ) -> str:
         """
         Return a developer-friendly representation.
         """

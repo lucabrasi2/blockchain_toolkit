@@ -1,24 +1,65 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Module:
-    TRON Contract Service
+Module
+------
+services.tron.contract_service
 
-Purpose:
-    Business logic for TRON contract operations.
+Purpose
+-------
+Business logic for TRON contract operations.
 
-Author: Jaramogi Diddy
-Project: Universal Blockchain Platform (UBP)
-Version: 2.0.0
+Responsibilities
+----------------
+• Validate TRON addresses
+• Detect smart contracts
+• Detect TRC-20 token contracts
+• Retrieve contract metadata
+• Generate controller-friendly contract reports
+
+Author
+------
+Jaramogi Diddy
+
+Project
+-------
+Universal Blockchain Platform (UBP)
+
+Version
+-------
+2.0 Enterprise
+===============================================================================
 """
 
-from typing import Dict, Any
+from __future__ import annotations
+
+from typing import Any
 
 from core.logger import get_logger
-from tron.contracts import is_contract, is_trc20, get_trc20_metadata
-from tron.wallets import is_valid_address
+
+from tron.contracts import (
+    get_trc20_metadata,
+    is_contract,
+    is_trc20,
+)
+
+from tron.wallets import (
+    get_trx_balance,
+    is_valid_address,
+)
+
+
+###############################################################################
+# Logger
+###############################################################################
 
 logger = get_logger(__name__)
+
+
+###############################################################################
+# TRON Contract Service
+###############################################################################
 
 
 class TronContractService:
@@ -26,12 +67,31 @@ class TronContractService:
     TRON contract business logic service.
     """
 
-    def __init__(self):
-        logger.info("TronContractService initialized.")
+    ###########################################################################
+    # Construction
+    ###########################################################################
 
-    def get_contract_report(self, address: str) -> Dict[str, Any]:
+    def __init__(
+        self,
+    ) -> None:
         """
-        Generate a complete contract report.
+        Initialize the TRON Contract Service.
+        """
+
+        logger.info(
+            "TronContractService initialized."
+        )
+
+    ###########################################################################
+    # Contract Report
+    ###########################################################################
+
+    def get_contract_report(
+        self,
+        address: str,
+    ) -> dict[str, Any]:
+        """
+        Generate a complete TRON contract report.
 
         Parameters
         ----------
@@ -40,34 +100,191 @@ class TronContractService:
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Contract report.
         """
-        logger.info(f"Generating contract report for {address}")
 
-        if not is_valid_address(address):
-            return {
+        logger.info(
+            "Generating TRON contract report for: %s",
+            address,
+        )
+
+        try:
+
+            ###################################################################
+            # Validate Address
+            ###################################################################
+
+            if not is_valid_address(
+                address,
+            ):
+
+                logger.warning(
+                    "Invalid TRON address: %s",
+                    address,
+                )
+
+                return {
+                    "address": address,
+                    "error": "Invalid TRON address",
+                    "is_valid": False,
+                }
+
+            ###################################################################
+            # Detect Contract Type
+            ###################################################################
+
+            contract = is_contract(
+                address,
+            )
+
+            trc20 = (
+                is_trc20(
+                    address,
+                )
+                if contract
+                else False
+            )
+
+            ###################################################################
+            # Retrieve TRX Balance
+            ###################################################################
+
+            balance_trx = 0.0
+            balance_sun = 0
+
+            try:
+
+                balance = get_trx_balance(
+                    address,
+                )
+
+                if isinstance(
+                    balance,
+                    dict,
+                ):
+
+                    balance_trx = balance.get(
+                        "trx",
+                        0.0,
+                    )
+
+                    balance_sun = balance.get(
+                        "sun",
+                        0,
+                    )
+
+            except Exception:
+
+                logger.exception(
+                    "Unable to retrieve TRON balance."
+                )
+
+            ###################################################################
+            # Build Base Report
+            ###################################################################
+
+            report: dict[str, Any] = {
                 "address": address,
-                "error": "Invalid TRON address",
-                "is_valid": False,
+
+                "is_contract": contract,
+
+                "classification": (
+                    "TRC-20 Token"
+                    if trc20
+                    else (
+                        "Contract"
+                        if contract
+                        else "EOA"
+                    )
+                ),
+
+                "contract_type": (
+                    "TRC-20"
+                    if trc20
+                    else (
+                        "Smart Contract"
+                        if contract
+                        else "N/A"
+                    )
+                ),
+
+                "bytecode_size": 0,
+
+                "balance_trx": balance_trx,
+
+                "balance_sun": balance_sun,
+
+                "energy": 0,
+
+                "bandwidth": 0,
             }
 
-        is_contract_address = is_contract(address)
-        is_trc20_token = is_trc20(address) if is_contract_address else False
+            ###################################################################
+            # TRC-20 Metadata
+            ###################################################################
 
-        report = {
-            "address": address,
-            "is_contract": is_contract_address,
-            "classification": "TRC-20 Token" if is_trc20_token else "Contract" if is_contract_address else "EOA",
-        }
+            if trc20:
 
-        if is_trc20_token:
-            metadata = get_trc20_metadata(address)
-            report.update({
-                "name": metadata.get("name", "Unknown"),
-                "symbol": metadata.get("symbol", "Unknown"),
-                "decimals": metadata.get("decimals", 18),
-                "total_supply": metadata.get("total_supply", 0),
-            })
+                try:
 
-        return report
+                    metadata = get_trc20_metadata(
+                        address,
+                    )
+
+                    report.update(
+                        {
+                            "name": metadata.get(
+                                "name",
+                                "Unknown",
+                            ),
+
+                            "symbol": metadata.get(
+                                "symbol",
+                                "Unknown",
+                            ),
+
+                            "decimals": metadata.get(
+                                "decimals",
+                                6,
+                            ),
+
+                            "total_supply": metadata.get(
+                                "total_supply",
+                                0,
+                            ),
+
+                            "owner": metadata.get(
+                                "owner",
+                            ),
+
+                            "standard": "TRC-20",
+
+                            "metadata": metadata,
+                        }
+                    )
+
+                except Exception:
+
+                    logger.exception(
+                        "Unable to retrieve TRC-20 metadata."
+                    )
+
+            ###################################################################
+            # Return Report
+            ###################################################################
+
+            logger.info(
+                "TRON contract report generated successfully."
+            )
+
+            return report
+
+        except Exception:
+
+            logger.exception(
+                "Failed to generate TRON contract report."
+            )
+
+            raise
+        

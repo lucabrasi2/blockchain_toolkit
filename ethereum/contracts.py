@@ -534,14 +534,7 @@ def classify_address(
     Returns
     -------
     str
-        Classification constant:
-            EOA
-            EOA_DELEGATED
-            ERC20
-            ERC721
-            ERC1155
-            CONTRACT
-            UNKNOWN
+        Classification constant.
     """
 
     logger.info(
@@ -550,17 +543,26 @@ def classify_address(
 
     _validate_address(address)
 
-    # Check if it's a contract first
+    # ---------------------------------------------------------
+    # EIP-7702 accounts may contain delegation bytecode while
+    # still remaining Externally Owned Accounts.
+    #
+    # Therefore this check MUST happen before is_contract().
+    # ---------------------------------------------------------
+    if is_eip7702_delegated(address):
+
+        logger.info(
+            "Address is an EIP-7702 delegated EOA."
+        )
+
+        return EOA_DELEGATED
+
+    # Normal EOA
     if not is_contract(address):
-
-        # Check for EIP-7702 delegation
-        if is_eip7702_delegated(address):
-
-            return EOA_DELEGATED
 
         return EOA
 
-    # It's a contract - check token standards
+    # Contract detection
     if is_erc20(address):
 
         return ERC20
@@ -574,23 +576,3 @@ def classify_address(
         return ERC1155
 
     return CONTRACT
-
-
-def get_contract_type(
-    address: str,
-) -> str:
-    """
-    Alias for classify_address.
-
-    Parameters
-    ----------
-    address : str
-        Ethereum address.
-
-    Returns
-    -------
-    str
-        Contract type classification.
-    """
-
-    return classify_address(address)

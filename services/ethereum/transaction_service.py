@@ -13,6 +13,16 @@ Ethereum transaction service layer.
 This service provides comprehensive transaction analysis,
 retrieval, and reporting functionality.
 
+Responsibilities
+----------------
+- Retrieve Ethereum transactions
+- Retrieve transaction receipts
+- Generate transaction reports
+- Determine transaction status
+- Calculate transaction confirmations
+- Retrieve gas price information
+- Perform ETH/Wei conversions
+
 Author
 ------
 Jaramogi Diddy
@@ -29,35 +39,79 @@ Version
 
 from __future__ import annotations
 
-from typing import Dict, Any, Optional
+from typing import Any
+
 from web3 import Web3
 
 from core.logger import get_logger
 from ethereum.connection import get_connection
-from ethereum.transactions import get_transaction as get_raw_transaction
+
+
+###############################################################################
+# Logger
+###############################################################################
 
 logger = get_logger(__name__)
+
+
+###############################################################################
+# Ethereum Transaction Service
+###############################################################################
 
 
 class TransactionService:
     """
     Ethereum transaction service.
-    
-    Provides transaction analysis, retrieval, and reporting.
+
+    Provides transaction analysis, retrieval,
+    reporting, and confirmation functionality.
     """
 
-    def __init__(self):
-        """Initialize the transaction service."""
-        self.w3 = get_connection()
-        logger.info("TransactionService initialized.")
+    ###########################################################################
+    # Construction
+    ###########################################################################
 
-    def get_connection(self) -> Web3:
-        """Get the Web3 connection."""
+    def __init__(
+        self,
+    ) -> None:
+        """
+        Initialize the transaction service.
+        """
+
+        self.w3 = get_connection()
+
+        logger.info(
+            "TransactionService initialized."
+        )
+
+    ###########################################################################
+    # Connection
+    ###########################################################################
+
+    def get_connection(
+        self,
+    ) -> Web3:
+        """
+        Get the active Web3 connection.
+
+        Returns
+        -------
+        Web3
+            Active Web3 connection.
+        """
+
         return self.w3
 
-    def get_transaction(self, tx_hash: str) -> Dict[str, Any]:
+    ###########################################################################
+    # Transaction Retrieval
+    ###########################################################################
+
+    def get_transaction(
+        self,
+        tx_hash: str,
+    ) -> dict[str, Any]:
         """
-        Get raw transaction by hash.
+        Get a raw Ethereum transaction by hash.
 
         Parameters
         ----------
@@ -66,18 +120,48 @@ class TransactionService:
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Raw transaction data.
         """
+
+        logger.info(
+            "Retrieving Ethereum transaction: %s",
+            tx_hash,
+        )
+
         try:
-            return self.w3.eth.get_transaction(tx_hash)
-        except Exception as error:
-            logger.error(f"Error getting transaction: {error}")
+
+            transaction = (
+                self.w3.eth.get_transaction(
+                    tx_hash,
+                )
+            )
+
+            logger.info(
+                "Ethereum transaction retrieved successfully."
+            )
+
+            return transaction
+
+        except Exception:
+
+            logger.exception(
+                "Failed to retrieve transaction: %s",
+                tx_hash,
+            )
+
             raise
 
-    def get_receipt(self, tx_hash: str) -> Optional[Dict[str, Any]]:
+    ###########################################################################
+    # Transaction Receipt
+    ###########################################################################
+
+    def get_receipt(
+        self,
+        tx_hash: str,
+    ) -> dict[str, Any] | None:
         """
-        Get transaction receipt.
+        Get an Ethereum transaction receipt.
 
         Parameters
         ----------
@@ -86,15 +170,46 @@ class TransactionService:
 
         Returns
         -------
-        Optional[Dict[str, Any]]
-            Transaction receipt or None.
+        dict[str, Any] | None
+            Transaction receipt, or None when unavailable.
         """
+
+        logger.info(
+            "Retrieving transaction receipt: %s",
+            tx_hash,
+        )
+
         try:
-            return self.w3.eth.get_transaction_receipt(tx_hash)
+
+            receipt = (
+                self.w3.eth.get_transaction_receipt(
+                    tx_hash,
+                )
+            )
+
+            logger.info(
+                "Transaction receipt retrieved successfully."
+            )
+
+            return receipt
+
         except Exception:
+
+            logger.warning(
+                "Transaction receipt unavailable: %s",
+                tx_hash,
+            )
+
             return None
 
-    def wei_to_eth(self, wei: int) -> float:
+    ###########################################################################
+    # Unit Conversion
+    ###########################################################################
+
+    def wei_to_eth(
+        self,
+        wei: int,
+    ) -> float:
         """
         Convert Wei to Ether.
 
@@ -108,9 +223,18 @@ class TransactionService:
         float
             Amount in Ether.
         """
-        return float(self.w3.from_wei(wei, "ether"))
 
-    def eth_to_wei(self, eth: float) -> int:
+        return float(
+            self.w3.from_wei(
+                wei,
+                "ether",
+            )
+        )
+
+    def eth_to_wei(
+        self,
+        eth: float,
+    ) -> int:
         """
         Convert Ether to Wei.
 
@@ -124,11 +248,28 @@ class TransactionService:
         int
             Amount in Wei.
         """
-        return int(self.w3.to_wei(eth, "ether"))
 
-    def get_transaction_report(self, tx_hash: str) -> Dict[str, Any]:
+        return int(
+            self.w3.to_wei(
+                eth,
+                "ether",
+            )
+        )
+
+
+###############################################################################
+# End of Part 1
+###############################################################################
+    ###########################################################################
+    # Transaction Report
+    ###########################################################################
+
+    def get_transaction_report(
+        self,
+        tx_hash: str,
+    ) -> dict[str, Any]:
         """
-        Generate a complete transaction report.
+        Generate a complete Ethereum transaction report.
 
         Parameters
         ----------
@@ -137,69 +278,221 @@ class TransactionService:
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Complete transaction report.
         """
-        logger.info(f"Generating transaction report for: {tx_hash}")
+
+        logger.info(
+            "Generating transaction report for: %s",
+            tx_hash,
+        )
+
+        #######################################################################
+        # Normalize Transaction Hash
+        #######################################################################
+
+        if isinstance(tx_hash, bytes):
+
+            tx_hash = (
+                "0x"
+                + tx_hash.hex()
+            )
+
+        elif not tx_hash.startswith("0x"):
+
+            tx_hash = (
+                "0x"
+                + tx_hash
+            )
 
         try:
-            # Normalize the hash
-            if isinstance(tx_hash, bytes):
-                tx_hash = '0x' + tx_hash.hex()
-            elif not tx_hash.startswith('0x'):
-                tx_hash = '0x' + tx_hash
 
-            # Get transaction
-            tx = self.get_transaction(tx_hash)
+            ###################################################################
+            # Retrieve Transaction
+            ###################################################################
 
-            # Get receipt
-            receipt = self.get_receipt(tx_hash)
+            transaction = self.get_transaction(
+                tx_hash,
+            )
 
-            # Build report
-            report = {
+            ###################################################################
+            # Retrieve Receipt
+            ###################################################################
+
+            receipt = self.get_receipt(
+                tx_hash,
+            )
+
+            ###################################################################
+            # Transaction Fields
+            ###################################################################
+
+            block_hash = transaction.get(
+                "blockHash",
+            )
+
+            if hasattr(
+                block_hash,
+                "hex",
+            ):
+                block_hash = block_hash.hex()
+
+            input_data = transaction.get(
+                "input",
+            )
+
+            if hasattr(
+                input_data,
+                "hex",
+            ):
+                input_data = input_data.hex()
+
+            elif not input_data:
+                input_data = "0x"
+
+            ###################################################################
+            # Base Transaction Report
+            ###################################################################
+
+            report: dict[str, Any] = {
                 "hash": tx_hash,
-                "block_number": tx.get("blockNumber"),
-                "block_hash": tx.get("blockHash").hex() if tx.get("blockHash") else None,
-                "from": tx.get("from"),
-                "to": tx.get("to"),
-                "value": self.wei_to_eth(tx.get("value", 0)),
-                "gas": tx.get("gas"),
-                "gas_price": tx.get("gasPrice"),
-                "nonce": tx.get("nonce"),
-                "input": tx.get("input").hex() if tx.get("input") else "0x",
-                "chain_id": tx.get("chainId"),
-                "transaction_index": tx.get("transactionIndex"),
-                "type": tx.get("type"),
+
+                "block_number": transaction.get(
+                    "blockNumber",
+                ),
+
+                "block_hash": block_hash,
+
+                "from": transaction.get(
+                    "from",
+                ),
+
+                "to": transaction.get(
+                    "to",
+                ),
+
+                "value": self.wei_to_eth(
+                    transaction.get(
+                        "value",
+                        0,
+                    )
+                ),
+
+                "gas": transaction.get(
+                    "gas",
+                ),
+
+                "gas_price": transaction.get(
+                    "gasPrice",
+                ),
+
+                "nonce": transaction.get(
+                    "nonce",
+                ),
+
+                "input": input_data,
+
+                "chain_id": transaction.get(
+                    "chainId",
+                ),
+
+                "transaction_index": transaction.get(
+                    "transactionIndex",
+                ),
+
+                "type": transaction.get(
+                    "type",
+                ),
             }
 
-            # Add receipt data if available
-            if receipt:
-                report["is_success"] = receipt.get("status") == 1
-                report["gas_used"] = receipt.get("gasUsed")
-                report["cumulative_gas_used"] = receipt.get("cumulativeGasUsed")
-                report["contract_address"] = receipt.get("contractAddress")
-                report["logs"] = receipt.get("logs", [])
-                report["effective_gas_price"] = receipt.get("effectiveGasPrice")
-                report["logs_count"] = len(receipt.get("logs", []))
-            else:
-                report["is_success"] = None
-                report["gas_used"] = None
-                report["cumulative_gas_used"] = None
-                report["contract_address"] = None
-                report["logs"] = []
-                report["effective_gas_price"] = None
-                report["logs_count"] = 0
+            ###################################################################
+            # Receipt Information
+            ###################################################################
 
-            logger.info(f"Transaction report generated for: {tx_hash}")
+            if receipt:
+
+                logs = receipt.get(
+                    "logs",
+                    [],
+                )
+
+                report.update(
+                    {
+                        "is_success": (
+                            receipt.get(
+                                "status",
+                            ) == 1
+                        ),
+
+                        "gas_used": receipt.get(
+                            "gasUsed",
+                        ),
+
+                        "cumulative_gas_used": receipt.get(
+                            "cumulativeGasUsed",
+                        ),
+
+                        "contract_address": receipt.get(
+                            "contractAddress",
+                        ),
+
+                        "logs": logs,
+
+                        "effective_gas_price": (
+                            receipt.get(
+                                "effectiveGasPrice",
+                            )
+                        ),
+
+                        "logs_count": len(
+                            logs,
+                        ),
+                    }
+                )
+
+            else:
+
+                report.update(
+                    {
+                        "is_success": None,
+                        "gas_used": None,
+                        "cumulative_gas_used": None,
+                        "contract_address": None,
+                        "logs": [],
+                        "effective_gas_price": None,
+                        "logs_count": 0,
+                    }
+                )
+
+            logger.info(
+                "Transaction report generated successfully: %s",
+                tx_hash,
+            )
+
             return report
 
         except Exception as error:
-            logger.error(f"Error generating transaction report: {error}")
-            return {"hash": tx_hash, "error": str(error)}
 
-    def get_transaction_status(self, tx_hash: str) -> str:
+            logger.exception(
+                "Failed to generate transaction report: %s",
+                tx_hash,
+            )
+
+            return {
+                "hash": tx_hash,
+                "error": str(error),
+            }
+
+    ###########################################################################
+    # Transaction Status
+    ###########################################################################
+
+    def get_transaction_status(
+        self,
+        tx_hash: str,
+    ) -> str:
         """
-        Get transaction status as string.
+        Get transaction status as a string.
 
         Parameters
         ----------
@@ -211,47 +504,101 @@ class TransactionService:
         str
             Transaction status.
         """
+
+        logger.info(
+            "Checking transaction status: %s",
+            tx_hash,
+        )
+
         try:
-            receipt = self.get_receipt(tx_hash)
+
+            receipt = self.get_receipt(
+                tx_hash,
+            )
+
             if receipt is None:
                 return "Pending"
 
-            if receipt.get("status") == 1:
-                return "Success"
-            elif receipt.get("status") == 0:
-                return "Failed"
-            else:
-                return "Unknown"
+            status = receipt.get(
+                "status",
+            )
 
-        except Exception as error:
-            logger.error(f"Error getting transaction status: {error}")
+            if status == 1:
+                return "Success"
+
+            if status == 0:
+                return "Failed"
+
             return "Unknown"
 
-    def get_gas_price(self) -> int:
+        except Exception:
+
+            logger.exception(
+                "Failed to determine transaction status: %s",
+                tx_hash,
+            )
+
+            return "Unknown"
+
+
+###############################################################################
+# End of Part 2
+###############################################################################
+    ###########################################################################
+    # Gas Price
+    ###########################################################################
+
+    def get_gas_price(
+        self,
+    ) -> int:
         """
-        Get current gas price in Wei.
+        Get the current Ethereum gas price in Wei.
 
         Returns
         -------
         int
             Gas price in Wei.
         """
+
+        logger.info(
+            "Retrieving current Ethereum gas price."
+        )
+
         return self.w3.eth.gas_price
 
-    def get_gas_price_gwei(self) -> float:
+    def get_gas_price_gwei(
+        self,
+    ) -> float:
         """
-        Get current gas price in Gwei.
+        Get the current Ethereum gas price in Gwei.
 
         Returns
         -------
         float
             Gas price in Gwei.
         """
-        return float(self.w3.from_wei(self.get_gas_price(), "gwei"))
 
-    def is_transaction_confirmed(self, tx_hash: str) -> bool:
+        logger.info(
+            "Retrieving current Ethereum gas price in Gwei."
+        )
+
+        return float(
+            self.w3.from_wei(
+                self.get_gas_price(),
+                "gwei",
+            )
+        )
+
+    ###########################################################################
+    # Transaction Confirmation
+    ###########################################################################
+
+    def is_transaction_confirmed(
+        self,
+        tx_hash: str,
+    ) -> bool:
         """
-        Check if a transaction is confirmed.
+        Check whether a transaction has been confirmed.
 
         Parameters
         ----------
@@ -261,14 +608,21 @@ class TransactionService:
         Returns
         -------
         bool
-            True if confirmed.
+            True if a transaction receipt exists.
         """
-        receipt = self.get_receipt(tx_hash)
+
+        receipt = self.get_receipt(
+            tx_hash,
+        )
+
         return receipt is not None
 
-    def get_transaction_confirmations(self, tx_hash: str) -> int:
+    def get_transaction_confirmations(
+        self,
+        tx_hash: str,
+    ) -> int:
         """
-        Get number of confirmations for a transaction.
+        Get the number of confirmations for a transaction.
 
         Parameters
         ----------
@@ -280,22 +634,77 @@ class TransactionService:
         int
             Number of confirmations.
         """
+
+        logger.info(
+            "Calculating confirmations for transaction: %s",
+            tx_hash,
+        )
+
         try:
-            receipt = self.get_receipt(tx_hash)
+
+            receipt = self.get_receipt(
+                tx_hash,
+            )
+
             if receipt is None:
                 return 0
 
-            current_block = self.w3.eth.block_number
-            tx_block = receipt.get("blockNumber")
+            current_block = (
+                self.w3.eth.block_number
+            )
 
-            if tx_block is None:
+            transaction_block = receipt.get(
+                "blockNumber",
+            )
+
+            if transaction_block is None:
                 return 0
 
-            return current_block - tx_block + 1
+            confirmations = (
+                current_block
+                - transaction_block
+                + 1
+            )
 
-        except Exception as error:
-            logger.error(f"Error getting confirmations: {error}")
+            return max(
+                confirmations,
+                0,
+            )
+
+        except Exception:
+
+            logger.exception(
+                "Failed to calculate transaction confirmations: %s",
+                tx_hash,
+            )
+
             return 0
+
+    ###########################################################################
+    # Representation
+    ###########################################################################
+
+    def __repr__(
+        self,
+    ) -> str:
+        """
+        Return a developer-friendly representation.
+        """
+
+        return (
+            f"{self.__class__.__name__}("
+            f"connected={self.w3.is_connected()}"
+            ")"
+        )
+
+
+###############################################################################
+# Public Exports
+###############################################################################
+
+__all__ = [
+    "TransactionService",
+]
 
 
 ###############################################################################

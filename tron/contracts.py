@@ -62,11 +62,7 @@ KNOWN_TRC20_TOKENS = {
         "symbol": "JST",
         "decimals": 18,
     },
-    "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb": {
-        "name": "WINkLink",
-        "symbol": "WIN",
-        "decimals": 6,
-    },
+    
     "TF17BgPaZYbz8oxbjhriubPDsA7ArKoLX3": {
         "name": "BTT",
         "symbol": "BTT",

@@ -362,7 +362,7 @@ def broadcast_transaction(blockchain, tx_data):
 
 
 # Start monitoring when module is imported
-start_monitoring()
+#start_monitoring()
 
 
 ###############################################################################
