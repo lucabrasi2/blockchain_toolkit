@@ -1,0 +1,11 @@
+{
+    "address": "TQ9h9QW4Y9Q4mJ72h3X8x9Q7v",
+    "created_at": "2026-08-17T10:11:16.356940+00:00",
+    "custody_type": "non_custodial",
+    "is_locked": true,
+    "metadata": {},
+    "network": "tron",
+    "updated_at": "2026-08-17T10:11:16.356947+00:00",
+    "wallet_id": "vitalik_wallet",
+    "wallet_type": "software"
+}

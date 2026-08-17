@@ -717,23 +717,239 @@ class WalletService:
                 return response.text.strip()
             return None
         except:
-            return None
+            return None  
     def _send_trx_transaction(self, from_address: str, to_address: str, amount: float, private_key: bytes) -> Dict[str, Any]:
         """
-        Send a TRON transaction.
+        Send a TRON transaction using direct TronGrid API with ecdsa signing.
         """
         try:
+            import requests
+            import json
+            import hashlib
+            import base58
+            from datetime import datetime
+            from ecdsa import SigningKey, SECP256k1
+            from ecdsa.util import sigencode_der
+            
             if not self.tron_provider:
                 return {"error": "TRON provider not available"}
 
-            # TRON transaction sending requires specific signing
-            # For now, return a placeholder
-            return {"error": "TRON transaction sending coming soon."}
+            # Step 1: Convert amount to SUN (1 TRX = 1,000,000 SUN)
+            amount_sun = int(amount * 1_000_000)
+            
+            if amount_sun <= 0:
+                return {"error": "Amount must be greater than 0"}
+
+            # Step 2: Get TronGrid URL
+            tron_api = self.tron_provider.http_url
+            
+            # Step 3: Check balance
+            account_response = requests.post(
+                f"{tron_api}/wallet/getaccount",
+                json={"address": from_address},
+                timeout=10
+            )
+            account_data = account_response.json()
+            balance_sun = account_data.get('balance', 0)
+            
+            if balance_sun < amount_sun:
+                return {"error": f"Insufficient balance. Have {balance_sun/1_000_000} TRX, need {amount} TRX"}
+
+            # Step 4: Get latest block
+            block_response = requests.post(
+                f"{tron_api}/wallet/getnowblock",
+                timeout=10
+            )
+            block_data = block_response.json()
+            latest_block = block_data.get('block_header', {}).get('raw_data', {}).get('number', 0)
+
+            # Step 5: Create transfer contract
+            contract = {
+                "type": "TransferContract",
+                "parameter": {
+                    "value": {
+                        "owner_address": from_address,
+                        "to_address": to_address,
+                        "amount": amount_sun
+                    },
+                    "type_url": "type.googleapis.com/protocol.TransferContract"
+                }
+            }
+
+            # Step 6: Build raw transaction
+            raw_data = {
+                "contract": [contract],
+                "ref_block_bytes": hex(latest_block % 0x10000)[2:].zfill(4),
+                "ref_block_hash": hex(latest_block)[2:].zfill(8),
+                "expiration": int((datetime.utcnow().timestamp() + 60) * 1000),
+                "timestamp": int(datetime.utcnow().timestamp() * 1000)
+            }
+
+            # Step 7: Create transaction JSON
+            transaction = {
+                "raw_data": raw_data,
+                "visible": True
+            }
+
+            # Step 8: Sign the transaction using ecdsa
+            try:
+                # Convert raw_data to bytes for signing
+                raw_data_bytes = json.dumps(raw_data, separators=(',', ':'), sort_keys=True).encode()
+                
+                # Create signing key from private key
+                signing_key = SigningKey.from_string(private_key, curve=SECP256k1)
+                
+                # Sign the raw data
+                signature = signing_key.sign_deterministic(
+                    raw_data_bytes,
+                    hashfunc=hashlib.sha256,
+                    sigencode=sigencode_der
+                )
+                
+                # Convert signature to hex
+                signature_hex = signature.hex()
+                
+                # Add signature to transaction
+                transaction['signature'] = [signature_hex]
+                
+                # Step 9: Broadcast the transaction
+                broadcast_response = requests.post(
+                    f"{tron_api}/wallet/broadcasttransaction",
+                    json=transaction,
+                    timeout=30
+                )
+                
+                result = broadcast_response.json()
+                
+                if result.get('result') is True:
+                    return {
+                        "tx_hash": result.get('txid'),
+                        "from": from_address,
+                        "to": to_address,
+                        "amount": amount,
+                        "asset": "TRX",
+                        "fee": 0,
+                    }
+                else:
+                    return {"error": f"Broadcast failed: {result}"}
+                    
+            except Exception as e:
+                return {"error": f"Signing failed: {str(e)}"}
 
         except Exception as e:
             logger.error(f"Error sending TRX transaction: {e}")
             return {"error": str(e)}
+    def _send_trx_transaction_fallback(self, from_address: str, to_address: str, amount_sun: int, private_key: bytes) -> Dict[str, Any]:
+        """
+        Fallback method for sending TRX using direct TronGrid API calls.
+        """
+        try:
+            import requests
+            import hashlib
+            import base58
+            import json
+            from tronpy.keys import PrivateKey
+            from tronpy.providers import HTTPProvider
 
+            # Step 1: Get TronGrid URL
+            tron_api = self.tron_provider.http_url
+            
+            # Step 2: Get account info
+            account_response = requests.post(
+                f"{tron_api}/wallet/getaccount",
+                json={"address": from_address},
+                timeout=10
+            )
+            account_data = account_response.json()
+            
+            # Step 3: Get latest block
+            block_response = requests.post(
+                f"{tron_api}/wallet/getnowblock",
+                timeout=10
+            )
+            block_data = block_response.json()
+            latest_block = block_data.get('block_header', {}).get('raw_data', {}).get('number', 0)
+            
+            # Step 4: Get chain parameters for fee reference
+            params_response = requests.post(
+                f"{tron_api}/wallet/getchainparameters",
+                timeout=10
+            )
+            params_data = params_response.json()
+            
+            # Step 5: Build the transaction
+            # Create transfer contract
+            contract = {
+                "type": "TransferContract",
+                "parameter": {
+                    "value": {
+                        "owner_address": from_address,
+                        "to_address": to_address,
+                        "amount": amount_sun
+                    },
+                    "type_url": "type.googleapis.com/protocol.TransferContract"
+                }
+            }
+            
+            # Step 6: Get the transaction builder
+            tx_data = {
+                "visible": True,
+                "txID": None
+            }
+            
+            # Create raw transaction
+            raw_tx = {
+                "raw_data": {
+                    "contract": [contract],
+                    "ref_block_bytes": hex(latest_block % 0x10000)[2:].zfill(4),
+                    "ref_block_hash": hex(latest_block)[2:].zfill(8),
+                    "expiration": int((datetime.utcnow().timestamp() + 60 * 60) * 1000),
+                    "timestamp": int(datetime.utcnow().timestamp() * 1000)
+                },
+                "visible": True
+            }
+            
+            # Step 7: Sign the transaction using tronpy PrivateKey
+            try:
+                # Convert private key to hex string
+                private_key_hex = private_key.hex()
+                
+                # Create PrivateKey from bytes
+                priv_key = PrivateKey(private_key)
+                
+                # Create transaction using tronpy
+                from tronpy import Tron
+                tron = Tron(provider=HTTPProvider(api_key=self.tron_provider._api_key))
+                
+                # Use tronpy's transaction builder
+                tx = (
+                    tron.trx.transfer(from_address, to_address, amount_sun)
+                    .build()
+                    .sign(priv_key)
+                )
+                
+                # Broadcast
+                result = tx.broadcast()
+                
+                if result and result.get('result') is True:
+                    return {
+                        "tx_hash": result.get('txid'),
+                        "from": from_address,
+                        "to": to_address,
+                        "amount": amount_sun / 1_000_000,
+                        "asset": "TRX",
+                        "fee": 0,
+                    }
+                else:
+                    return {"error": f"Broadcast failed: {result}"}
+                    
+            except Exception as e:
+                logger.error(f"TRON signing/broadcast failed: {e}")
+                return {"error": f"TRON transaction failed: {str(e)}"}
+
+        except Exception as e:
+            logger.error(f"TRON fallback transaction failed: {e}")
+            return {"error": f"TRON transaction failed: {str(e)}"}
     def _get_native_asset(self, blockchain: str) -> str:
         """Get native asset symbol for blockchain."""
         assets = {
