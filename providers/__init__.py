@@ -77,6 +77,17 @@ from providers.public import PublicProvider
 from providers.tron import TronProvider
 from providers.bitcoin import BitcoinProvider
 
+# Load environment variables first
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+# Find the project root .env file
+project_root = Path(__file__).resolve().parent.parent
+env_file = project_root / ".env"
+if env_file.exists():
+    load_dotenv(env_file)
+
 
 logger = get_logger(__name__)
 

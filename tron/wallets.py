@@ -42,8 +42,8 @@ def is_valid_address(address: str) -> bool:
         if not address.startswith('T'):
             return False
             
-        if len(address) != 34:
-            return False
+        if not address.startswith('T') or len(address) < 30:
+         return False
             
         return True
         

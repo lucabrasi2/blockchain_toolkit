@@ -11,6 +11,7 @@ Purpose
 Enterprise implementation of the Alchemy blockchain provider.
 
 Responsibilities
+import os
 ----------------
 • Build Alchemy RPC endpoints
 • Validate configuration
@@ -216,11 +217,7 @@ class AlchemyProvider(BaseProvider):
 
         if self._http_url is None:
 
-            api_key = (
-                self._api_key
-                if self._api_key
-                else "demo"
-            )
+            api_key = self._api_key if self._api_key else os.getenv("ALCHEMY_API_KEY", "")
 
             self._http_url = (
                 f"https://"

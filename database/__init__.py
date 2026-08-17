@@ -26,21 +26,31 @@ Version
 
 from database.database import DatabaseManager, get_db_manager
 from database.models import (
+    # Existing models
     WalletInspection,
     ContractInspection,
     TransactionHistory,
     NodeHealth,
     CacheEntry,
+    # New models
+    User,
+    Wallet,
+    UserTransaction,
 )
 
 __all__ = [
     "DatabaseManager",
     "get_db_manager",
+    # Existing models
     "WalletInspection",
     "ContractInspection",
     "TransactionHistory",
     "NodeHealth",
     "CacheEntry",
+    # New models
+    "User",
+    "Wallet",
+    "UserTransaction",
 ]
 
 

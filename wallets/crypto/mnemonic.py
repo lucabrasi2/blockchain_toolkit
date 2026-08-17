@@ -364,4 +364,127 @@ class Bip39Mnemonic:
         entropy_bytes = secrets.token_bytes(strength // 8)
         
         # Convert to mnemonic
-        return cls._entropy_to_mnemonic(entropy_bytes
+        return cls._entropy_to_mnemonic(entropy_bytes)
+    
+    @classmethod
+    def _entropy_to_mnemonic(cls, entropy: bytes) -> str:
+        """
+        Convert entropy bytes to a BIP-39 mnemonic phrase.
+        
+        Args:
+            entropy: Random entropy bytes
+            
+        Returns:
+            Space-separated mnemonic phrase
+        """
+        # Calculate checksum (first entropy_bits/32 bits)
+        entropy_bits = len(entropy) * 8
+        checksum_bits = entropy_bits // 32
+        
+        # Hash the entropy
+        hash_bytes = hashlib.sha256(entropy).digest()
+        
+        # Convert entropy to bits (as string of 0s and 1s)
+        entropy_bits_str = ''.join(format(byte, '08b') for byte in entropy)
+        checksum_bits_str = ''.join(format(byte, '08b') for byte in hash_bytes)[:checksum_bits]
+        
+        # Combine entropy + checksum
+        all_bits = entropy_bits_str + checksum_bits_str
+        
+        # Split into 11-bit chunks
+        word_count = len(all_bits) // 11
+        words = []
+        for i in range(word_count):
+            start = i * 11
+            end = start + 11
+            chunk = all_bits[start:end]
+            index = int(chunk, 2)
+            words.append(BIP39_ENGLISH_WORDLIST[index])
+        
+        return ' '.join(words)
+    
+    @classmethod
+    def to_seed(cls, mnemonic: str, passphrase: str = "") -> bytes:
+        """
+        Convert a mnemonic phrase to a seed using PBKDF2-HMAC-SHA512.
+        
+        Args:
+            mnemonic: Space-separated mnemonic phrase
+            passphrase: Optional passphrase (BIP-39 passphrase)
+            
+        Returns:
+            64-byte seed bytes
+        """
+        if not mnemonic or not isinstance(mnemonic, str):
+            raise WalletValidationError("Mnemonic must be a non-empty string")
+        
+        # Normalize the mnemonic and passphrase
+        mnemonic = unicodedata.normalize("NFKD", mnemonic)
+        passphrase = "mnemonic" + unicodedata.normalize("NFKD", passphrase)
+        
+        # Convert to bytes
+        mnemonic_bytes = mnemonic.encode("utf-8")
+        passphrase_bytes = passphrase.encode("utf-8")
+        
+        # Use PBKDF2 with 2048 iterations (BIP-39 standard)
+        return hashlib.pbkdf2_hmac(
+            "sha512",
+            mnemonic_bytes,
+            passphrase_bytes,
+            2048,
+            64
+        )
+    
+    @classmethod
+    def validate(cls, mnemonic: str) -> bool:
+        """
+        Validate a BIP-39 mnemonic phrase.
+        
+        Args:
+            mnemonic: Space-separated mnemonic phrase
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not mnemonic or not isinstance(mnemonic, str):
+            return False
+        
+        words = mnemonic.strip().split()
+        word_count = len(words)
+        
+        # Check word count is valid
+        if word_count not in [12, 15, 18, 21, 24]:
+            return False
+        
+        # Check all words are in the wordlist
+        for word in words:
+            if word not in BIP39_ENGLISH_WORDLIST:
+                return False
+        
+        # Verify checksum
+        entropy_bits = word_count * 11 - (word_count * 11) // 33
+        entropy_byte_count = entropy_bits // 8
+        
+        # Convert words to bits
+        bits = ''
+        for word in words:
+            index = BIP39_ENGLISH_WORDLIST.index(word)
+            bits += format(index, '011b')
+        
+        # Split into entropy and checksum
+        entropy_bits_str = bits[:entropy_bits]
+        checksum_bits_str = bits[entropy_bits:]
+        
+        # Convert entropy to bytes
+        entropy_bytes = int(entropy_bits_str, 2).to_bytes(entropy_byte_count, 'big')
+        
+        # Calculate expected checksum
+        hash_bytes = hashlib.sha256(entropy_bytes).digest()
+        expected_checksum = ''.join(format(byte, '08b') for byte in hash_bytes)[:len(checksum_bits_str)]
+        
+        return checksum_bits_str == expected_checksum
+
+
+###############################################################################
+# End of File
+###############################################################################

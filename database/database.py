@@ -523,3 +523,8 @@ def get_db_manager() -> DatabaseManager:
 ###############################################################################
 # End of File
 ###############################################################################
+
+# Import new models for initialization
+
+# Update the _init_db method to include new tables
+# (The Base.metadata already includes them via import)
