@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wallet Management - UBP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e17;
+            color: #e0e6ed;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1f2e, #0d1220);
+            padding: 20px 40px;
+            border-bottom: 1px solid #2a3a5a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .version { color: #6a7a8e; font-size: 14px; }
+        .nav {
+            display: flex;
+            gap: 20px;
+            background: #141b2b;
+            padding: 12px 40px;
+            border-bottom: 1px solid #1e2a3e;
+            flex-wrap: wrap;
+        }
+        .nav a {
+            color: #8a9aae;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s;
+            font-size: 15px;
+        }
+        .nav a:hover { background: #1e2a3e; color: #e0e6ed; }
+        .nav a.active { background: #6c5ce7; color: white; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px; }
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 28px;
+            margin-bottom: 24px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: #141b2b;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #1e2a3e;
+        }
+        .card h3 {
+            font-size: 16px;
+            color: #8a9aae;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card input, .card select {
+            width: 100%;
+            padding: 10px 14px;
+            background: #0d1422;
+            border: 1px solid #1e2a3e;
+            border-radius: 8px;
+            color: #e0e6ed;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            margin-bottom: 8px;
+        }
+        .card input:focus, .card select:focus {
+            outline: none;
+            border-color: #6c5ce7;
+        }
+        .btn {
+            background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: opacity 0.3s;
+            width: 100%;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn-bitcoin { background: linear-gradient(135deg, #f7931a, #e6841a); }
+        .btn-tron { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .btn-success { background: linear-gradient(135deg, #00b894, #00a884); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .btn-sm { padding: 6px 12px; font-size: 12px; width: auto; }
+        .result {
+            margin-top: 12px;
+            padding: 12px;
+            background: #0d1422;
+            border-radius: 8px;
+            border: 1px solid #1e2a3e;
+            font-size: 12px;
+            max-height: 250px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            color: #aab8c9;
+        }
+        .result .success { color: #00b894; }
+        .result .error { color: #ef4444; }
+        .wallet-list {
+            margin-top: 12px;
+        }
+        .wallet-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: #0d1422;
+            border-radius: 8px;
+            border: 1px solid #1e2a3e;
+            margin-bottom: 8px;
+        }
+        .wallet-item .info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .wallet-item .address {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #8a9aae;
+        }
+        .wallet-item .balance {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .wallet-item .blockchain-tag {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .tag.ethereum { background: #6c5ce7; color: white; }
+        .tag.bitcoin { background: #f7931a; color: white; }
+        .tag.tron { background: #ef4444; color: white; }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #4a5a6e;
+            font-size: 13px;
+            border-top: 1px solid #1a1f2e;
+            margin-top: 30px;
+        }
+        .loading { color: #6a7a8e; font-style: italic; }
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: #4a5a6e;
+        }
+        .empty-state .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+        .flex { display: flex; gap: 8px; align-items: center; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .mt-8 { margin-top: 8px; }
+        .seed-phrase {
+            background: #0d1422;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #f7931a;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #f7931a;
+            word-break: break-all;
+            margin-top: 8px;
+        }
+        .seed-warning {
+            color: #f59e0b;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌐 Universal Blockchain Platform</h1>
+        <span class="version">v2.0.0</span>
+    </div>
+    <div class="nav">
+        <a href="/">Home</a>
+        <a href="/ethereum">🟣 Ethereum</a>
+        <a href="/bitcoin">🟠 Bitcoin</a>
+        <a href="/tron">🔴 TRON</a>
+        <a href="/wallets" class="active">👛 Wallet Management</a>
+        <a href="/dashboard">📊 Dashboard</a>
+        <a href="/history">📜 History</a>
+        <a href="/auth/profile">👤 Profile</a>
+        <a href="/auth/logout">🚪 Logout</a>
+    </div>
+    <div class="container">
+        <div class="page-title">
+            <span>👛</span> Wallet Management
+        </div>
+
+        <!-- Create Wallet -->
+        <div class="grid">
+            <div class="card">
+                <h3>🔄 Create New Wallet</h3>
+                <select id="wallet-blockchain">
+                    <option value="ethereum">Ethereum (ETH)</option>
+                    <option value="bitcoin">Bitcoin (BTC)</option>
+                    <option value="tron">TRON (TRX)</option>
+                </select>
+                <input type="text" id="wallet-label" placeholder="Wallet Label (e.g., 'My ETH Wallet')">
+                <button class="btn" onclick="createWallet()">Create Wallet</button>
+                <div id="create-result" class="result">Ready</div>
+            </div>
+
+            <!-- My Wallets -->
+            <div class="card">
+                <h3>📂 My Wallets</h3>
+                <button class="btn" onclick="loadWallets()">Refresh Wallets</button>
+                <div id="wallets-list" class="wallet-list">
+                    <div class="empty-state">
+                        <span class="emoji">👛</span>
+                        No wallets yet. Create your first wallet!
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wallet Details -->
+        <div class="card" style="margin-top:20px;">
+            <h3>🔍 Wallet Details</h3>
+            <div class="flex">
+                <select id="wallet-select" style="flex:1;">
+                    <option value="">Select a wallet...</option>
+                </select>
+                <button class="btn btn-sm btn-success" onclick="loadWalletDetails()">View</button>
+            </div>
+            <div id="wallet-details" class="result">Select a wallet to view details</div>
+        </div>
+
+        <!-- Send Transaction -->
+        <div class="card" style="margin-top:20px;">
+            <h3>📤 Send Transaction</h3>
+            <div class="flex">
+                <select id="send-wallet-select" style="flex:1;">
+                    <option value="">Select a wallet...</option>
+                </select>
+            </div>
+            <input type="text" id="send-to" placeholder="Recipient Address">
+            <input type="number" id="send-amount" placeholder="Amount" step="0.000001">
+            <button class="btn btn-success" onclick="sendTransaction()">Send</button>
+            <div id="send-result" class="result">Ready</div>
+        </div>
+    </div>
+    <div class="footer">
+        Universal Blockchain Platform (UBP) v2.0.0 &bull; Built with ❤️
+    </div>
+
+    <script>
+        // Load wallets on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadWallets();
+            loadWalletSelects();
+        });
+
+        async function fetchAPI(url, method = 'GET', data = null) {
+            const options = {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            };
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+            const response = await fetch(url, options);
+            return response.json();
+        }
+
+        async function loadWallets() {
+            const container = document.getElementById('wallets-list');
+            container.innerHTML = '<div class="loading">Loading wallets...</div>';
+
+            try {
+                const data = await fetchAPI('/api/wallets');
+                if (data.success && data.wallets.length > 0) {
+                    container.innerHTML = '';
+                    data.wallets.forEach(w => {
+                        const tagClass = w.blockchain;
+                        const symbol = w.blockchain === 'ethereum' ? 'ETH' : 
+                                      w.blockchain === 'bitcoin' ? 'BTC' : 'TRX';
+                        const div = document.createElement('div');
+                        div.className = 'wallet-item';
+                        div.innerHTML = `
+                            <div class="info">
+                                <div>
+                                    <span class="blockchain-tag tag ${tagClass}">${w.blockchain.toUpperCase()}</span>
+                                    <strong>${w.label || 'Unnamed'}</strong>
+                                </div>
+                                <div class="address">${w.address}</div>
+                            </div>
+                            <div class="balance">
+                                ${w.balance ? w.balance.balance.toFixed(6) + ' ' + w.balance.symbol : '0.00 ' + symbol}
+                            </div>
+                        `;
+                        container.appendChild(div);
+                    });
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <span class="emoji">👛</span>
+                            No wallets yet. Create your first wallet!
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                container.innerHTML = `<div class="error">Error loading wallets: ${e.message}</div>`;
+            }
+        }
+
+        async function loadWalletSelects() {
+            try {
+                const data = await fetchAPI('/api/wallets');
+                if (data.success && data.wallets.length > 0) {
+                    const selects = ['wallet-select', 'send-wallet-select'];
+                    selects.forEach(id => {
+                        const select = document.getElementById(id);
+                        if (select) {
+                            select.innerHTML = '<option value="">Select a wallet...</option>';
+                            data.wallets.forEach(w => {
+                                const opt = document.createElement('option');
+                                opt.value = w.wallet_id;
+                                opt.textContent = `${w.blockchain.toUpperCase()}: ${w.label || w.address.slice(0, 10)}...`;
+                                select.appendChild(opt);
+                            });
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error('Error loading wallet selects:', e);
+            }
+        }
+
+        async function createWallet() {
+            const blockchain = document.getElementById('wallet-blockchain').value;
+            const label = document.getElementById('wallet-label').value || `${blockchain.charAt(0).toUpperCase() + blockchain.slice(1)} Wallet`;
+            const resultDiv = document.getElementById('create-result');
+            resultDiv.textContent = 'Creating wallet...';
+
+            try {
+                const data = await fetchAPI('/api/wallets/create', 'POST', {
+                    blockchain: blockchain,
+                    label: label
+                });
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <span class="success">✅ Wallet created successfully!</span>
+                        <br><strong>Wallet ID:</strong> ${data.wallet.wallet_id}
+                        <br><strong>Address:</strong> ${data.wallet.address}
+                        ${data.seed_phrase ? `
+                            <br><br>
+                            <div class="seed-phrase">${data.seed_phrase}</div>
+                            <div class="seed-warning">⚠️ Save this seed phrase! It will not be shown again.</div>
+                        ` : ''}
+                    `;
+                    loadWallets();
+                    loadWalletSelects();
+                    document.getElementById('wallet-label').value = '';
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+            }
+        }
+
+        async function loadWalletDetails() {
+            const select = document.getElementById('wallet-select');
+            const walletId = select.value;
+            const resultDiv = document.getElementById('wallet-details');
+
+            if (!walletId) {
+                resultDiv.textContent = 'Please select a wallet';
+                return;
+            }
+
+            resultDiv.textContent = 'Loading wallet details...';
+
+            try {
+                const data = await fetchAPI(`/api/wallets/${walletId}/info`);
+                if (data.success) {
+                    const w = data.wallet;
+                    resultDiv.innerHTML = `
+                        <strong>Wallet ID:</strong> ${w.wallet_id}
+                        <br><strong>Blockchain:</strong> ${w.blockchain}
+                        <br><strong>Address:</strong> ${w.address}
+                        <br><strong>Label:</strong> ${w.label || 'N/A'}
+                        <br><strong>Balance:</strong> ${w.balance ? w.balance.balance.toFixed(6) + ' ' + w.balance.symbol : '0.00'}
+                        <br><strong>Created:</strong> ${w.created_at || 'N/A'}
+                        <br><strong>Network:</strong> ${w.network}
+                        <br><strong>Type:</strong> ${w.wallet_type}
+                        <br><strong>Custody:</strong> ${w.custody_type}
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+            }
+        }
+
+        async function sendTransaction() {
+            const select = document.getElementById('send-wallet-select');
+            const walletId = select.value;
+            const toAddress = document.getElementById('send-to').value.trim();
+            const amount = parseFloat(document.getElementById('send-amount').value);
+            const resultDiv = document.getElementById('send-result');
+
+            if (!walletId) {
+                resultDiv.innerHTML = '<span class="error">❌ Please select a wallet</span>';
+                return;
+            }
+            if (!toAddress) {
+                resultDiv.innerHTML = '<span class="error">❌ Please enter recipient address</span>';
+                return;
+            }
+            if (!amount || amount <= 0) {
+                resultDiv.innerHTML = '<span class="error">❌ Please enter a valid amount</span>';
+                return;
+            }
+
+            resultDiv.textContent = 'Sending transaction...';
+
+            try {
+                const data = await fetchAPI(`/api/wallets/${walletId}/send`, 'POST', {
+                    to_address: toAddress,
+                    amount: amount
+                });
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <span class="success">✅ Transaction sent!</span>
+                        <br><strong>TX Hash:</strong> ${data.transaction.tx_hash}
+                        <br><strong>From:</strong> ${data.transaction.from}
+                        <br><strong>To:</strong> ${data.transaction.to}
+                        <br><strong>Amount:</strong> ${data.transaction.amount} ${data.transaction.asset}
+                        <br><strong>Fee:</strong> ${data.transaction.fee || 'N/A'}
+                        <br><strong>Status:</strong> ${data.transaction.status}
+                    `;
+                    // Refresh wallet list to update balance
+                    setTimeout(loadWallets, 3000);
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+            }
+        }
+    </script>
+</body>
+</html>

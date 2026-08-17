@@ -1,29 +1,23 @@
 """
 ===============================================================================
 Universal Blockchain Platform (UBP)
-
 Module
 ------
 web.app_simple
-
 Purpose
 -------
 Flask web interface for UBP (without WebSocket).
-
 Author
 ------
 Jaramogi Diddy
-
 Project
 -------
 Universal Blockchain Platform (UBP)
-
 Version
 -------
 2.0 Enterprise
 ===============================================================================
 """
-
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -36,7 +30,6 @@ from flask_mail import Mail
 from datetime import datetime
 from functools import wraps
 import sqlite3
-
 from controllers.ethereum_controller import EthereumController
 from controllers.bitcoin_controller import BitcoinController
 from controllers.tron_controller import TronController
@@ -44,12 +37,7 @@ from core.logger import get_logger
 
 # Import authentication
 from web.auth import auth_bp, load_user, get_user_manager, require_api_key, authenticate_api_key
-
-# Import permissions
 from web.permissions import require_permission, Permission, require_role, has_permission
-
-# Import WebSocket
-from web.ws import socketio, init_socketio, start_monitoring
 
 logger = get_logger(__name__)
 
@@ -64,7 +52,6 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True') == 'True'
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER')
-
 mail = Mail(app)
 
 # Setup authentication
@@ -85,13 +72,16 @@ app.jinja_env.globals['current_user'] = current_user
 # Enable CORS
 CORS(app)
 
+# Import mobile API blueprint
+from api.mobile import mobile_bp
+app.register_blueprint(mobile_bp)
+
 # Initialize controllers
 logger.info("Initializing controllers...")
 eth_controller = EthereumController()
 btc_controller = BitcoinController()
 tron_controller = TronController()
 logger.info("Controllers initialized.")
-
 
 # ============ Helper Functions ============
 
@@ -108,6 +98,14 @@ def convert_to_serializable(obj):
     else:
         return obj
 
+def api_login_required(f):
+    """Custom decorator for API endpoints that returns JSON on auth failure."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return jsonify({"success": False, "error": "Please login first"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 def require_api_key(func):
     """Decorator to require API key authentication."""
@@ -120,7 +118,6 @@ def require_api_key(func):
         return jsonify({"error": "Invalid or missing API key"}), 401
     return wrapper
 
-
 # ============ Page Routes ============
 
 @app.route('/')
@@ -128,32 +125,26 @@ def index():
     """Home page."""
     return render_template('index.html')
 
-
 @app.route('/ethereum')
 def ethereum_page():
     """Ethereum page."""
     return render_template('ethereum.html')
-
 
 @app.route('/bitcoin')
 def bitcoin_page():
     """Bitcoin page."""
     return render_template('bitcoin.html')
 
-
 @app.route('/tron')
 def tron_page():
     """TRON page."""
     return render_template('tron.html')
 
-
 @app.route('/dashboard')
 @login_required
-@require_permission(Permission.VIEW_DASHBOARD)
 def dashboard_page():
     """Dashboard page."""
     return render_template('dashboard.html')
-
 
 @app.route('/history')
 @login_required
@@ -162,6 +153,129 @@ def history_page():
     """History page."""
     return render_template('history.html')
 
+@app.route('/wallets')
+@login_required
+def wallets_page():
+    """Wallet Management page."""
+    return render_template('wallets.html')
+
+# ============ Wallet API Endpoints ============
+
+@app.route('/api/wallets', methods=['GET'])
+@api_login_required
+def get_wallets():
+    """Get all wallets for the current user."""
+    try:
+        from services.wallet_service import WalletService
+        wallet_service = WalletService()
+        
+        wallets = wallet_service.get_user_wallets(current_user.id)
+        
+        # Get balance for each wallet
+        for wallet in wallets:
+            balance = wallet_service.get_wallet_balance(wallet['wallet_id'])
+            if "error" not in balance:
+                wallet['balance'] = balance
+        
+        return jsonify({
+            "success": True,
+            "wallets": wallets
+        })
+    except Exception as e:
+        logger.error(f"Error getting wallets: {e}")
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/api/wallets/create', methods=['POST'])
+@api_login_required
+def create_wallet():
+    """Create a new wallet for the current user."""
+    try:
+        from services.wallet_service import WalletService
+        wallet_service = WalletService()
+        
+        data = request.json
+        blockchain = data.get('blockchain', 'ethereum')
+        label = data.get('label')
+        
+        wallet = wallet_service.create_wallet(
+            user_id=current_user.id,
+            blockchain=blockchain,
+            label=label
+        )
+        
+        if wallet:
+            return jsonify({
+                "success": True,
+                "wallet": wallet
+            })
+        else:
+            return jsonify({"error": "Failed to create wallet"}), 400
+            
+    except Exception as e:
+        logger.error(f"Error creating wallet: {e}")
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/api/wallets/<wallet_id>/info', methods=['GET'])
+@api_login_required
+def get_wallet_info(wallet_id):
+    """Get wallet information."""
+    try:
+        from services.wallet_service import WalletService
+        wallet_service = WalletService()
+        
+        info = wallet_service.get_wallet_by_id(wallet_id)
+        if info:
+            # Get balance
+            balance = wallet_service.get_wallet_balance(wallet_id)
+            if "error" not in balance:
+                info['balance'] = balance
+            return jsonify({"success": True, "wallet": info})
+        else:
+            return jsonify({"error": "Wallet not found"}), 404
+    except Exception as e:
+        logger.error(f"Error getting wallet info: {e}")
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/api/wallets/<wallet_id>/send', methods=['POST'])
+@api_login_required
+def send_transaction(wallet_id):
+    """Send a transaction from a wallet."""
+    try:
+        from services.wallet_service import WalletService
+        wallet_service = WalletService()
+        
+        data = request.json
+        to_address = data.get('to_address')
+        amount = float(data.get('amount', 0))
+        
+        if not to_address:
+            return jsonify({"error": "Recipient address required"}), 400
+        
+        if amount <= 0:
+            return jsonify({"error": "Amount must be greater than 0"}), 400
+        
+        # Verify wallet belongs to user
+        wallets = wallet_service.get_user_wallets(current_user.id)
+        if not any(w['wallet_id'] == wallet_id for w in wallets):
+            return jsonify({"error": "Wallet not found or access denied"}), 403
+        
+        result = wallet_service.send_transaction(
+            wallet_id=wallet_id,
+            to_address=to_address,
+            amount=amount
+        )
+        
+        if "error" in result:
+            return jsonify({"error": result["error"]}), 400
+        
+        return jsonify({
+            "success": True,
+            "transaction": result
+        })
+        
+    except Exception as e:
+        logger.error(f"Error sending transaction: {e}")
+        return jsonify({"error": str(e)}), 400
 
 # ============ Ethereum API Endpoints ============
 
@@ -188,7 +302,6 @@ def ethereum_wallet():
         logger.error(f"Ethereum wallet error: {e}")
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/ethereum/contract', methods=['POST'])
 def ethereum_contract():
     """Inspect Ethereum contract."""
@@ -201,7 +314,6 @@ def ethereum_contract():
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 @app.route('/api/ethereum/token', methods=['POST'])
 def ethereum_token():
@@ -216,7 +328,6 @@ def ethereum_token():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/ethereum/block', methods=['POST'])
 def ethereum_block():
     """Explore Ethereum block."""
@@ -227,7 +338,6 @@ def ethereum_block():
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 @app.route('/api/ethereum/transaction', methods=['POST'])
 def ethereum_transaction():
@@ -242,7 +352,6 @@ def ethereum_transaction():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/ethereum/gas', methods=['GET'])
 def ethereum_gas():
     """Get Ethereum gas price."""
@@ -253,7 +362,6 @@ def ethereum_gas():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/ethereum/node/validate', methods=['POST'])
 def validate_ethereum_node():
     """Validate the current Ethereum node."""
@@ -263,7 +371,6 @@ def validate_ethereum_node():
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 @app.route('/api/ethereum/node/compare', methods=['POST'])
 def compare_ethereum_nodes():
@@ -280,7 +387,6 @@ def compare_ethereum_nodes():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 # ============ Bitcoin API Endpoints ============
 
 @app.route('/api/bitcoin/wallet', methods=['POST'])
@@ -296,7 +402,6 @@ def bitcoin_wallet():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/bitcoin/block', methods=['POST'])
 def bitcoin_block():
     """Explore Bitcoin block."""
@@ -307,7 +412,6 @@ def bitcoin_block():
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 @app.route('/api/bitcoin/transaction', methods=['POST'])
 def bitcoin_transaction():
@@ -322,7 +426,6 @@ def bitcoin_transaction():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/bitcoin/fee', methods=['GET'])
 def bitcoin_fee():
     """Get Bitcoin fee estimates."""
@@ -333,7 +436,6 @@ def bitcoin_fee():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/bitcoin/node/validate', methods=['POST'])
 def validate_bitcoin_node():
     """Validate Bitcoin network."""
@@ -343,7 +445,6 @@ def validate_bitcoin_node():
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 # ============ TRON API Endpoints ============
 
@@ -360,7 +461,6 @@ def tron_wallet():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/tron/contract', methods=['POST'])
 def tron_contract():
     """Inspect TRON contract."""
@@ -374,7 +474,6 @@ def tron_contract():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/tron/token', methods=['POST'])
 def tron_token():
     """Inspect TRON token."""
@@ -387,7 +486,6 @@ def tron_token():
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 @app.route('/api/tron/block', methods=['POST'])
 def tron_block():
@@ -403,12 +501,9 @@ def tron_block():
             report = get_block(block_num)
         else:
             report = get_block(int(block))
-        
         return jsonify(convert_to_serializable(report))
-        
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 @app.route('/api/tron/transaction', methods=['POST'])
 def tron_transaction():
@@ -424,7 +519,6 @@ def tron_transaction():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/tron/node/validate', methods=['POST'])
 def validate_tron_node():
     """Validate TRON node."""
@@ -436,7 +530,6 @@ def validate_tron_node():
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 # ============ Dashboard & History API Endpoints ============
 
@@ -472,7 +565,6 @@ def dashboard_stats():
     except Exception as e:
         logger.error(f"Dashboard stats error: {e}")
         return jsonify({"error": str(e)}), 400
-
 
 @app.route('/api/dashboard/recent', methods=['GET'])
 @login_required
@@ -521,7 +613,6 @@ def dashboard_recent():
     except Exception as e:
         logger.error(f"Dashboard recent error: {e}")
         return jsonify({"error": str(e)}), 400
-
 
 @app.route('/api/history', methods=['GET'])
 @login_required
@@ -607,7 +698,6 @@ def history():
         logger.error(f"History error: {e}")
         return jsonify({"error": str(e)}), 400
 
-
 # ============ Export Endpoints ============
 
 @app.route('/api/export/<export_type>', methods=['GET'])
@@ -668,7 +758,6 @@ def export_data(export_type):
         logger.error(f"Export error: {e}")
         return jsonify({"error": str(e)}), 400
 
-
 # ============ User Management Endpoints (Admin Only) ============
 
 @app.route('/api/admin/users', methods=['GET'])
@@ -703,7 +792,6 @@ def admin_users():
         logger.error(f"Admin users error: {e}")
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/admin/users/<user_id>/role', methods=['PUT'])
 @login_required
 @require_role('admin')
@@ -730,7 +818,6 @@ def admin_update_role(user_id):
         logger.error(f"Admin update role error: {e}")
         return jsonify({"error": str(e)}), 400
 
-
 # ============ Main Entry Point ============
 
 if __name__ == '__main__':
@@ -744,19 +831,9 @@ if __name__ == '__main__':
     logger.info(f"📍 Register: http://localhost:5000/auth/register")
     logger.info(f"📍 Profile: http://localhost:5000/auth/profile")
     logger.info("=" * 60)
-    logger.info("🔌 WebSocket running for real-time updates")
-    logger.info("=" * 60)
     
-    # Initialize SocketIO
-    init_socketio(app)
-    
-    # Start monitoring threads
-    start_monitoring()
-    
-    # Run with SocketIO
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
-
-
+    # Run with debug mode
+    app.run(host='0.0.0.0', port=5000, debug=True)
 ###############################################################################
 # End of File
 ###############################################################################
