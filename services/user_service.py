@@ -151,19 +151,31 @@ class UserService:
         except Exception as e:
             logger.error(f"Authentication error: {e}")
             return None
-
     def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID."""
         try:
+            user_uuid = uuid.UUID(str(user_id))
+
             with self.db.get_session() as session:
-                user = session.query(User).filter(User.id == user_id).first()
+                user = (
+                    session.query(User)
+                    .filter(User.id == user_uuid)
+                    .first()
+                )
+
                 if user:
                     session.expunge(user)
+
                 return user
+
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.error(f"Invalid user ID: {user_id} - {e}")
+            return None
+
         except Exception as e:
             logger.error(f"Error getting user: {e}")
             return None
-
+    
     def get_user_by_username(self, username: str) -> Optional[User]:
         """Get user by username."""
         try:

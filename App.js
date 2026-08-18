@@ -13,53 +13,180 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// API Base URL - We'll update this later
+// ============================================================================
+// UBP Mobile API Configuration
+// ============================================================================
+
 const API_URL = 'http://localhost:5000';
 
-// ============ Login Screen ============
+const MOBILE_API_URL = `${API_URL}/api/mobile`;
+
+const STORAGE_KEYS = {
+  TOKEN: 'token',
+  USER: 'user',
+  IS_LOGGED_IN: 'isLoggedIn',
+};
+
+
+// ============================================================================
+// API Helpers
+// ============================================================================
+
+/**
+ * Parse a JSON response safely.
+ */
+const parseResponse = async (response) => {
+  try {
+    return await response.json();
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Invalid server response',
+    };
+  }
+};
+
+
+/**
+ * Store authentication information locally.
+ */
+const storeAuthentication = async (token, user) => {
+  if (!token) {
+    throw new Error('Authentication token was not returned by the server');
+  }
+
+  await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
+
+  if (user) {
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.USER,
+      JSON.stringify(user)
+    );
+  }
+
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.IS_LOGGED_IN,
+    'true'
+  );
+};
+
+
+/**
+ * Clear authentication information.
+ */
+const clearAuthentication = async () => {
+  await AsyncStorage.multiRemove([
+    STORAGE_KEYS.TOKEN,
+    STORAGE_KEYS.USER,
+    STORAGE_KEYS.IS_LOGGED_IN,
+  ]);
+};
+
+
+/**
+ * Retrieve the stored authentication token.
+ */
+const getAuthToken = async () => {
+  return await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+};
+
+
+/**
+ * Retrieve the stored user.
+ */
+const getStoredUser = async () => {
+  const user = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+
+  if (!user) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(user);
+  } catch (error) {
+    console.error('Unable to parse stored user:', error);
+    return null;
+  }
+};
+
+
+// ============================================================================
+// Login Screen
+// ============================================================================
+
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+
   const handleLogin = async () => {
-    if (!username || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!username.trim() || !password) {
+      Alert.alert(
+        'Error',
+        'Please enter your username and password.'
+      );
       return;
     }
 
     setLoading(true);
+
     try {
-      const formData = new FormData();
-      formData.append('username', username);
-      formData.append('password', password);
+      const response = await fetch(
+        `${MOBILE_API_URL}/auth/login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: username.trim(),
+            password,
+          }),
+        }
+      );
 
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        body: formData,
-      });
+      const data = await parseResponse(response);
 
-      const data = await response.json();
+      if (response.ok && data.success && data.token) {
+        await storeAuthentication(
+          data.token,
+          data.user
+        );
 
-      if (response.ok) {
-        await AsyncStorage.setItem('user', JSON.stringify({ username }));
-        await AsyncStorage.setItem('isLoggedIn', 'true');
         navigation.replace('Dashboard');
-      } else {
-        Alert.alert('Error', data.error || 'Login failed');
+        return;
       }
+
+      Alert.alert(
+        'Login Failed',
+        data.error || 'Unable to sign in.'
+      );
+
     } catch (error) {
-      Alert.alert('Error', 'Network error. Please check your connection.');
+      console.error('Mobile login error:', error);
+
+      Alert.alert(
+        'Network Error',
+        'Unable to connect to the UBP server. Please check that the server is running.'
+      );
+
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
+
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🌐 UBP</Text>
-      <Text style={styles.subtitle}>Sign in to your account</Text>
+
+      <Text style={styles.subtitle}>
+        Sign in to your account
+      </Text>
 
       <View style={styles.form}>
+
         <TextInput
           style={styles.input}
           placeholder="Username"
@@ -67,7 +194,10 @@ const LoginScreen = ({ navigation }) => {
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
         />
+
         <TextInput
           style={styles.input}
           placeholder="Password"
@@ -75,76 +205,149 @@ const LoginScreen = ({ navigation }) => {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          editable={!loading}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleLogin}
+          disabled={loading}
+        >
           {loading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
+            <Text style={styles.buttonText}>
+              Sign In
+            </Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.link}>Don't have an account? Register</Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Register')}
+          disabled={loading}
+        >
+          <Text style={styles.link}>
+            Don't have an account? Register
+          </Text>
         </TouchableOpacity>
+
       </View>
     </View>
   );
 };
 
-// ============ Register Screen ============
-const RegisterScreen = ({ navigation }) => {
+
+// ============================================================================
+// Register Screen
+// ============================================================================
+
+const RegisterScreen = ({ snavigation }) => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+
   const handleRegister = async () => {
-    if (!username || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (
+      !username.trim() ||
+      !email.trim() ||
+      !password ||
+      !confirmPassword
+    ) {
+      Alert.alert(
+        'Error',
+        'Please fill in all fields.'
+      );
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert(
+        'Error',
+        'Passwords do not match.'
+      );
       return;
     }
 
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters');
+      Alert.alert(
+        'Error',
+        'Password must be at least 8 characters.'
+      );
       return;
     }
 
     setLoading(true);
+
     try {
-      const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `username=${encodeURIComponent(username)}&email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}&confirm_password=${encodeURIComponent(confirmPassword)}`,
-      });
+      const response = await fetch(
+        `${MOBILE_API_URL}/auth/register`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: username.trim(),
+            email: email.trim(),
+            password,
+          }),
+        }
+      );
 
-      const data = await response.json();
+const data = await parseResponse(response);
+  console.log('LOGIN STATUS:', response.status);
+  console.log('LOGIN SUCCESS:', data.success);
+  console.log('TOKEN RECEIVED:', Boolean(data.token));
+  console.log(
+  'TOKEN LENGTH:',
+  data.token ? data.token.length : 0
+);
 
-      if (response.ok) {
-        Alert.alert('Success', 'Registration successful! Please login.');
-        navigation.navigate('Login');
-      } else {
-        Alert.alert('Error', data.error || 'Registration failed');
+      if (response.ok && data.success && data.token) {
+        await storeAuthentication(
+          data.token,
+          data.user
+        );
+
+        navigation.replace('Dashboard');
+        return;
       }
+
+      Alert.alert(
+        'Registration Failed',
+        data.error || 'Unable to create your account.'
+      );
+
     } catch (error) {
-      Alert.alert('Error', 'Network error. Please try again.');
+      console.error(
+        'Mobile registration error:',
+        error
+      );
+
+      Alert.alert(
+        'Network Error',
+        'Unable to connect to the UBP server. Please try again.'
+      );
+
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
+
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🌐 UBP</Text>
-      <Text style={styles.subtitle}>Create your account</Text>
+
+      <Text style={styles.subtitle}>
+        Create your account
+      </Text>
 
       <View style={styles.form}>
+
         <TextInput
           style={styles.input}
           placeholder="Username"
@@ -152,7 +355,10 @@ const RegisterScreen = ({ navigation }) => {
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
         />
+
         <TextInput
           style={styles.input}
           placeholder="Email"
@@ -160,8 +366,11 @@ const RegisterScreen = ({ navigation }) => {
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
+          autoCorrect={false}
           keyboardType="email-address"
+          editable={!loading}
         />
+
         <TextInput
           style={styles.input}
           placeholder="Password"
@@ -169,7 +378,9 @@ const RegisterScreen = ({ navigation }) => {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          editable={!loading}
         />
+
         <TextInput
           style={styles.input}
           placeholder="Confirm Password"
@@ -177,161 +388,734 @@ const RegisterScreen = ({ navigation }) => {
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry
+          editable={!loading}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleRegister}
+          disabled={loading}
+        >
           {loading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={styles.buttonText}>Create Account</Text>
+            <Text style={styles.buttonText}>
+              Create Account
+            </Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.link}>Already have an account? Sign In</Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Login')}
+          disabled={loading}
+        >
+          <Text style={styles.link}>
+            Already have an account? Sign In
+          </Text>
         </TouchableOpacity>
+
       </View>
     </View>
   );
 };
 
-// ============ Dashboard Screen ============
+
+// ============================================================================
+// Dashboard Screen
+// ============================================================================
+
 const DashboardScreen = ({ navigation }) => {
-  const [stats, setStats] = useState({ total_inspections: 0, ethereum: 0, bitcoin: 0, tron: 0 });
+  const [stats, setStats] = useState({
+    total_inspections: 0,
+    ethereum: 0,
+    bitcoin: 0,
+    tron: 0,
+  });
+
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadDashboard(); }, []);
 
-  const loadDashboard = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/dashboard/stats`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+const loadDashboard = async () => {
+  try {
+    const token = await getAuthToken();
+
+    console.log(
+      'STORED TOKEN EXISTS:',
+      Boolean(token)
+    );
+
+    console.log(
+      'STORED TOKEN LENGTH:',
+      token ? token.length : 0
+    );
+
+    if (!token) {
+      await clearAuthentication();
+      navigation.replace('Login');
+      return;
+    }
+
+    console.log(
+      'AUTH HEADER TOKEN LENGTH:',
+      token.length
+    );
+
+      // ------------------------------------------------------------
+      // Validate the mobile authentication token first.
+      // ------------------------------------------------------------
+
+      const authResponse = await fetch(
+        `${MOBILE_API_URL}/auth/me`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      const authData = await parseResponse(authResponse);
+
+      console.log(
+       'AUTH ME STATUS:',
+       authResponse.status
+);
+
+     console.log(
+     'AUTH ME RESPONSE:',
+      authData
+);
+
+      if (authResponse.status === 401) {
+        await clearAuthentication();
+
+        Alert.alert(
+          'Session Expired',
+          'Please sign in again.'
+        );
+
+        navigation.replace('Login');
+        return;
+      }
+
+
+      if (!authResponse.ok) {
+        throw new Error(
+          'Unable to validate authentication session'
+        );
+      }
+
+      if (!authData.success || !authData.user) {
+        await clearAuthentication();
+        navigation.replace('Login');
+        return;
+      }
+
+
+      setUser(authData.user);
+
+
+      // ------------------------------------------------------------
+      // Existing dashboard statistics endpoint.
+      //
+      // This endpoint belongs to the existing web application.
+      // We intentionally leave it unchanged until the dedicated
+      // mobile dashboard endpoint is implemented.
+      // ------------------------------------------------------------
+
+      const response = await fetch(
+        `${API_URL}/api/dashboard/stats`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+
+      if (response.ok) {
+        const data = await parseResponse(response);
+
+        if (data && typeof data === 'object') {
+          setStats({
+            total_inspections:
+              data.total_inspections ?? 0,
+
+            ethereum:
+              data.ethereum ?? 0,
+
+            bitcoin:
+              data.bitcoin ?? 0,
+
+            tron:
+              data.tron ?? 0,
+          });
+        }
+      } else if (response.status === 401) {
+        console.warn(
+          'Dashboard statistics endpoint rejected mobile token.'
+        );
+
+        // Keep the authenticated mobile session active.
+        // The dedicated mobile dashboard endpoint will replace
+        // this request in the next backend integration step.
+        setStats({
+          total_inspections: 0,
+          ethereum: 0,
+          bitcoin: 0,
+          tron: 0,
+        });
+      }
+
+    } catch (error) {
+      console.error(
+        'Dashboard loading error:',
+        error
+      );
+
+      // Do not automatically log the user out for a
+      // temporary dashboard/network failure.
+      setStats({
+        total_inspections: 0,
+        ethereum: 0,
+        bitcoin: 0,
+        tron: 0,
       });
-      const data = await response.json();
-      setStats(data);
-    } catch (error) { console.error(error); }
-    setLoading(false);
+
+    } finally {
+      setLoading(false);
+    }
   };
+
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('user');
-    await AsyncStorage.removeItem('isLoggedIn');
+    try {
+      await clearAuthentication();
+    } catch (error) {
+      console.error(
+        'Logout storage error:',
+        error
+      );
+    }
+
     navigation.replace('Login');
   };
+
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#6c5ce7" />
+        <ActivityIndicator
+          size="large"
+          color="#6c5ce7"
+        />
       </View>
     );
   }
 
+
   return (
     <SafeAreaView style={styles.safe}>
+
       <View style={styles.dashboardHeader}>
-        <Text style={styles.title}>📊 Dashboard</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={styles.logoutLink}>🚪</Text>
+
+        <View>
+          <Text style={styles.title}>
+            📊 Dashboard
+          </Text>
+
+          {user?.username ? (
+            <Text style={styles.dashboardUser}>
+              Welcome, {user.username}
+            </Text>
+          ) : null}
+        </View>
+
+        <TouchableOpacity
+          onPress={handleLogout}
+        >
+          <Text style={styles.logoutLink}>
+            🚪
+          </Text>
         </TouchableOpacity>
+
       </View>
 
+
       <ScrollView style={styles.container}>
+
         <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { borderColor: '#6c5ce7' }]}>
-            <Text style={styles.statValue}>{stats.total_inspections}</Text>
-            <Text style={styles.statLabel}>Total</Text>
+
+          <View
+            style={[
+              styles.statCard,
+              {
+                borderColor: '#6c5ce7',
+              },
+            ]}
+          >
+            <Text style={styles.statValue}>
+              {stats.total_inspections}
+            </Text>
+
+            <Text style={styles.statLabel}>
+              Total
+            </Text>
           </View>
-          <View style={[styles.statCard, { borderColor: '#6c5ce7' }]}>
-            <Text style={styles.statValue}>{stats.ethereum}</Text>
-            <Text style={styles.statLabel}>🟣 ETH</Text>
+
+
+          <View
+            style={[
+              styles.statCard,
+              {
+                borderColor: '#6c5ce7',
+              },
+            ]}
+          >
+            <Text style={styles.statValue}>
+              {stats.ethereum}
+            </Text>
+
+            <Text style={styles.statLabel}>
+              🟣 ETH
+            </Text>
           </View>
-          <View style={[styles.statCard, { borderColor: '#f7931a' }]}>
-            <Text style={styles.statValue}>{stats.bitcoin}</Text>
-            <Text style={styles.statLabel}>🟠 BTC</Text>
+
+
+          <View
+            style={[
+              styles.statCard,
+              {
+                borderColor: '#f7931a',
+              },
+            ]}
+          >
+            <Text style={styles.statValue}>
+              {stats.bitcoin}
+            </Text>
+
+            <Text style={styles.statLabel}>
+              🟠 BTC
+            </Text>
           </View>
-          <View style={[styles.statCard, { borderColor: '#ef4444' }]}>
-            <Text style={styles.statValue}>{stats.tron}</Text>
-            <Text style={styles.statLabel}>🔴 TRX</Text>
+
+
+          <View
+            style={[
+              styles.statCard,
+              {
+                borderColor: '#ef4444',
+              },
+            ]}
+          >
+            <Text style={styles.statValue}>
+              {stats.tron}
+            </Text>
+
+            <Text style={styles.statLabel}>
+              🔴 TRX
+            </Text>
           </View>
+
         </View>
 
+
         <View style={styles.quickActions}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#6c5ce7' }]} onPress={() => Alert.alert('Coming Soon', 'Ethereum features in development')}>
-            <Text style={styles.actionText}>🟣 Ethereum</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: '#6c5ce7',
+              },
+            ]}
+            onPress={() =>
+              Alert.alert(
+                'Coming Soon',
+                'Ethereum features in development'
+              )
+            }
+          >
+            <Text style={styles.actionText}>
+              🟣 Ethereum
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#f7931a' }]} onPress={() => Alert.alert('Coming Soon', 'Bitcoin features in development')}>
-            <Text style={styles.actionText}>🟠 Bitcoin</Text>
+
+
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: '#f7931a',
+              },
+            ]}
+            onPress={() =>
+              Alert.alert(
+                'Coming Soon',
+                'Bitcoin features in development'
+              )
+            }
+          >
+            <Text style={styles.actionText}>
+              🟠 Bitcoin
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#ef4444' }]} onPress={() => Alert.alert('Coming Soon', 'TRON features in development')}>
-            <Text style={styles.actionText}>🔴 TRON</Text>
+
+
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: '#ef4444',
+              },
+            ]}
+            onPress={() =>
+              Alert.alert(
+                'Coming Soon',
+                'TRON features in development'
+              )
+            }
+          >
+            <Text style={styles.actionText}>
+              🔴 TRON
+            </Text>
           </TouchableOpacity>
+
         </View>
+
       </ScrollView>
+
     </SafeAreaView>
   );
 };
 
-// ============ App Navigation ============
+
+// ============================================================================
+// App Navigation
+// ============================================================================
+
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(null);
   const [currentScreen, setCurrentScreen] = useState('Login');
 
-  useEffect(() => { checkLogin(); }, []);
+
+  useEffect(() => {
+    checkLogin();
+  }, []);
+
 
   const checkLogin = async () => {
-    const loggedIn = await AsyncStorage.getItem('isLoggedIn');
-    setIsLoggedIn(loggedIn === 'true');
-    setCurrentScreen(loggedIn === 'true' ? 'Dashboard' : 'Login');
+    try {
+      const token = await getAuthToken();
+
+      if (!token) {
+        await clearAuthentication();
+
+        setIsLoggedIn(false);
+        setCurrentScreen('Login');
+        return;
+      }
+
+
+      // ------------------------------------------------------------
+      // Verify that the stored token is still valid.
+      // ------------------------------------------------------------
+
+      const response = await fetch(
+        `${MOBILE_API_URL}/auth/me`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+
+      if (!response.ok) {
+        await clearAuthentication();
+
+        setIsLoggedIn(false);
+        setCurrentScreen('Login');
+        return;
+      }
+
+
+      const data = await parseResponse(response);
+
+
+      if (
+        !data.success ||
+        !data.user
+      ) {
+        await clearAuthentication();
+
+        setIsLoggedIn(false);
+        setCurrentScreen('Login');
+        return;
+      }
+
+
+      // Refresh stored user information.
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.USER,
+        JSON.stringify(data.user)
+      );
+
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.IS_LOGGED_IN,
+        'true'
+      );
+
+
+      setIsLoggedIn(true);
+      setCurrentScreen('Dashboard');
+
+    } catch (error) {
+      console.error(
+        'Authentication check error:',
+        error
+      );
+
+      // If the server cannot be reached, do not assume
+      // the user is logged out permanently.
+      //
+      // For startup, however, we need a deterministic screen.
+      // The user can sign in again if necessary.
+      setIsLoggedIn(false);
+      setCurrentScreen('Login');
+    }
   };
+
 
   if (isLoggedIn === null) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#6c5ce7" />
+        <ActivityIndicator
+          size="large"
+          color="#6c5ce7"
+        />
       </View>
     );
   }
 
+
   const renderScreen = () => {
     switch (currentScreen) {
-      case 'Login': return <LoginScreen navigation={{ navigate: setCurrentScreen, replace: setCurrentScreen }} />;
-      case 'Register': return <RegisterScreen navigation={{ navigate: setCurrentScreen }} />;
-      case 'Dashboard': return <DashboardScreen navigation={{ navigate: setCurrentScreen, replace: setCurrentScreen }} />;
-      default: return <LoginScreen navigation={{ navigate: setCurrentScreen, replace: setCurrentScreen }} />;
+
+      case 'Login':
+        return (
+          <LoginScreen
+            navigation={{
+              navigate: setCurrentScreen,
+              replace: setCurrentScreen,
+            }}
+          />
+        );
+
+
+      case 'Register':
+        return (
+          <RegisterScreen
+            navigation={{
+              navigate: setCurrentScreen,
+              replace: setCurrentScreen,
+            }}
+          />
+        );
+
+
+      case 'Dashboard':
+        return (
+          <DashboardScreen
+            navigation={{
+              navigate: setCurrentScreen,
+              replace: setCurrentScreen,
+            }}
+          />
+        );
+
+
+      default:
+        return (
+          <LoginScreen
+            navigation={{
+              navigate: setCurrentScreen,
+              replace: setCurrentScreen,
+            }}
+          />
+        );
     }
   };
 
+
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0e17" />
+
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="#0a0e17"
+      />
+
       {renderScreen()}
+
     </SafeAreaView>
   );
 };
 
-// ============ Styles ============
+
+// ============================================================================
+// Styles
+// ============================================================================
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a0e17' },
-  container: { flex: 1, backgroundColor: '#0a0e17', padding: 20 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0e17' },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#e0e6ed', textAlign: 'center', marginBottom: 4 },
-  subtitle: { color: '#6a7a8e', textAlign: 'center', marginBottom: 30, fontSize: 14 },
-  form: { gap: 12 },
-  input: { backgroundColor: '#141b2b', padding: 14, borderRadius: 10, color: '#e0e6ed', fontSize: 16, borderWidth: 1, borderColor: '#1e2a3e' },
-  button: { backgroundColor: '#6c5ce7', padding: 16, borderRadius: 10, alignItems: 'center', marginTop: 4 },
-  buttonText: { color: 'white', fontSize: 18, fontWeight: '600' },
-  link: { color: '#6c5ce7', textAlign: 'center', marginTop: 12, fontSize: 14 },
-  dashboardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
-  logoutLink: { fontSize: 24, color: '#ef4444' },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
-  statCard: { flex: 1, minWidth: '45%', backgroundColor: '#141b2b', padding: 16, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
-  statValue: { fontSize: 28, fontWeight: 'bold', color: '#e0e6ed' },
-  statLabel: { color: '#8a9aae', fontSize: 12, marginTop: 4 },
-  quickActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 16 },
-  actionBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  actionText: { color: 'white', fontWeight: '600', fontSize: 14 },
+
+  safe: {
+    flex: 1,
+    backgroundColor: '#0a0e17',
+  },
+
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0e17',
+    padding: 20,
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0a0e17',
+  },
+
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#e0e6ed',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+
+  subtitle: {
+    color: '#6a7a8e',
+    textAlign: 'center',
+    marginBottom: 30,
+    fontSize: 14,
+  },
+
+  form: {
+    gap: 12,
+  },
+
+  input: {
+    backgroundColor: '#141b2b',
+    padding: 14,
+    borderRadius: 10,
+    color: '#e0e6ed',
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#1e2a3e',
+  },
+
+  button: {
+    backgroundColor: '#6c5ce7',
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+
+  buttonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+
+  link: {
+    color: '#6c5ce7',
+    textAlign: 'center',
+    marginTop: 12,
+    fontSize: 14,
+  },
+
+  dashboardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+
+  dashboardUser: {
+    color: '#8a9aae',
+    fontSize: 13,
+    marginTop: 2,
+  },
+
+  logoutLink: {
+    fontSize: 24,
+    color: '#ef4444',
+  },
+
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
+  },
+
+  statCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#141b2b',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+
+  statValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#e0e6ed',
+  },
+
+  statLabel: {
+    color: '#8a9aae',
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 16,
+  },
+
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+
+  actionText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
 });
+
 
 export default App;
