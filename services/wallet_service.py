@@ -382,10 +382,10 @@ class WalletService:
         except Exception as e:
             logger.error(f"Error getting balance: {e}")
             return {"error": str(e)}
-
     def get_wallet_report(self, wallet_id: str) -> Dict[str, Any]:
         """
-        Get detailed wallet report including token holdings.
+        Get detailed wallet report including native balance,
+        token holdings, and blockchain-specific metadata.
 
         Parameters
         ----------
@@ -395,86 +395,324 @@ class WalletService:
         Returns
         -------
         Dict[str, Any]
-            Wallet report with balance, token holdings, and metadata.
+            Wallet report containing:
+            - wallet metadata
+            - native blockchain balance
+            - native asset
+            - token holdings
+            - blockchain-specific information
+
+        Notes
+        -----
+        Native assets and token assets are intentionally kept separate.
+
+        Examples
+        --------
+        Ethereum:
+            Native asset = ETH
+
+        Bitcoin:
+            Native asset = BTC
+
+        TRON:
+            Native asset = TRX
+            Token assets = TRC-20 tokens such as USDT
         """
         try:
+            # ------------------------------------------------------------------
             # Get wallet from database
-            wallet_info = self.get_wallet_by_id(wallet_id)
-            if not wallet_info:
-                return {"error": "Wallet not found"}
+            # ------------------------------------------------------------------
 
-            blockchain = wallet_info.get("blockchain", "ethereum")
+            wallet_info = self.get_wallet_by_id(wallet_id)
+
+            if not wallet_info:
+                return {
+                    "error": "Wallet not found"
+                }
+
+            blockchain = str(
+                wallet_info.get(
+                    "blockchain",
+                    "ethereum"
+                )
+            ).lower()
+
             address = wallet_info.get("address")
 
-            # Start with basic wallet info
+            # ------------------------------------------------------------------
+            # Start with basic wallet information
+            # ------------------------------------------------------------------
+
             result = {
                 "address": address,
                 "blockchain": blockchain,
-                "network": wallet_info.get("network", "mainnet"),
+                "network": wallet_info.get(
+                    "network",
+                    "mainnet"
+                ),
                 "label": wallet_info.get("label"),
                 "wallet_id": wallet_id,
+
+                # Native blockchain balance
+                "balance": 0,
+                "asset": None,
+                "decimals": 18,
+
+                # Token balances are populated below
                 "token_balances": [],
             }
 
-            # Get balance
-            balance = self.get_wallet_balance(wallet_id)
+            # ------------------------------------------------------------------
+            # Get native blockchain balance
+            # ------------------------------------------------------------------
+
+            balance = self.get_wallet_balance(
+                wallet_id
+            )
+
             if "error" not in balance:
                 result.update({
-                    "balance": balance.get("balance", 0),
-                    "asset": balance.get("symbol", "ETH"),
-                    "decimals": balance.get("decimals", 18),
+                    "balance": balance.get(
+                        "balance",
+                        0
+                    ),
+                    "asset": balance.get(
+                        "symbol",
+                        self._get_native_asset(
+                            blockchain
+                        )
+                    ),
+                    "decimals": balance.get(
+                        "decimals",
+                        18
+                    ),
                 })
 
-            # Get additional blockchain-specific info
-            if blockchain == "ethereum" and self.eth_provider:
+            # Explicitly preserve the native asset information.
+            #
+            # This is important for TRON because TRX is the native asset,
+            # while USDT is a separate TRC-20 token.
+
+            result["native_asset"] = result.get(
+                "asset"
+            ) or self._get_native_asset(
+                blockchain
+            )
+
+            result["native_balance"] = result.get(
+                "balance",
+                0
+            )
+
+            # ------------------------------------------------------------------
+            # Ethereum-specific information
+            # ------------------------------------------------------------------
+
+            if (
+                blockchain == "ethereum"
+                and self.eth_provider
+            ):
                 try:
                     w3 = self.eth_provider.web3
-                    result["nonce"] = w3.eth.get_transaction_count(address)
-                    code = w3.eth.get_code(address)
-                    result["is_contract"] = len(code) > 0
-                    result["classification"] = "Contract" if result["is_contract"] else "EOA"
-                    result["transaction_count"] = result.get("nonce", 0)
+
+                    result["nonce"] = (
+                        w3.eth.get_transaction_count(
+                            address
+                        )
+                    )
+
+                    code = w3.eth.get_code(
+                        address
+                    )
+
+                    result["is_contract"] = (
+                        len(code) > 0
+                    )
+
+                    result["classification"] = (
+                        "Contract"
+                        if result["is_contract"]
+                        else "EOA"
+                    )
+
+                    result["transaction_count"] = (
+                        result.get(
+                            "nonce",
+                            0
+                        )
+                    )
+
                 except Exception as e:
-                    logger.warning(f"Could not fetch Ethereum details: {e}")
+                    logger.warning(
+                        f"Could not fetch Ethereum details: {e}"
+                    )
+
+            # ------------------------------------------------------------------
+            # Bitcoin-specific information
+            # ------------------------------------------------------------------
 
             elif blockchain == "bitcoin":
                 try:
                     import requests
+
                     response = requests.get(
-                        f"https://blockchain.info/q/addressbalance/{address}",
+                        (
+                            "https://blockchain.info/"
+                            f"q/addressbalance/{address}"
+                        ),
                         timeout=10
                     )
-                    if response.status_code == 200:
-                        balance_satoshis = int(response.text)
-                        result["transaction_count"] = 0
-                    result["is_contract"] = False
-                    result["classification"] = "Bitcoin Address"
-                    result["nonce"] = 0
-                except Exception as e:
-                    logger.warning(f"Could not fetch Bitcoin details: {e}")
 
-            elif blockchain == "tron" and self.tron_provider:
+                    if response.status_code == 200:
+                        balance_satoshis = int(
+                            response.text
+                        )
+
+                        result["transaction_count"] = 0
+
+                        # Keep the value available for diagnostic/reporting
+                        # purposes without replacing the wallet balance
+                        # returned by get_wallet_balance().
+                        result["balance_satoshis"] = (
+                            balance_satoshis
+                        )
+
+                    result["is_contract"] = False
+                    result["classification"] = (
+                        "Bitcoin Address"
+                    )
+                    result["nonce"] = 0
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not fetch Bitcoin details: {e}"
+                    )
+
+            # ------------------------------------------------------------------
+            # TRON-specific information
+            # ------------------------------------------------------------------
+
+            elif (
+                blockchain == "tron"
+                and self.tron_provider
+            ):
                 try:
-                    account = self.tron_provider.get_account(address)
-                    result["energy"] = account.get("energy", 0)
-                    result["bandwidth"] = account.get("bandwidth", 0)
+                    account = (
+                        self.tron_provider.get_account(
+                            address
+                        )
+                    )
+
+                    result["energy"] = account.get(
+                        "energy",
+                        0
+                    )
+
+                    result["bandwidth"] = account.get(
+                        "bandwidth",
+                        0
+                    )
+
                     result["is_contract"] = False
                     result["classification"] = "EOA"
                     result["nonce"] = 0
                     result["transaction_count"] = 0
-                except Exception as e:
-                    logger.warning(f"Could not fetch TRON details: {e}")
 
-            # For token balances - would need to query token contracts
-            # This is a placeholder for future implementation
-            result["token_balances"] = []
+                except Exception as e:
+                    logger.warning(
+                        f"Could not fetch TRON details: {e}"
+                    )
+
+            # ------------------------------------------------------------------
+            # Token holdings
+            # ------------------------------------------------------------------
+            #
+            # IMPORTANT:
+            #
+            # Do not replace the native TRON balance with the USDT balance.
+            #
+            # TRON:
+            #     Native asset -> TRX
+            #     Token asset  -> USDT / other TRC-20 tokens
+            #
+            # get_token_holdings() is already responsible for querying the
+            # supported token contracts, so we reuse it here.
+            # ------------------------------------------------------------------
+
+            try:
+                token_result = (
+                    self.get_token_holdings(
+                        wallet_id
+                    )
+                )
+
+                if (
+                    isinstance(token_result, dict)
+                    and "error" not in token_result
+                ):
+                    result["token_balances"] = (
+                        token_result.get(
+                            "tokens",
+                            []
+                        )
+                    )
+
+                    # Preserve useful token metadata when available.
+                    result["total_tokens"] = (
+                        token_result.get(
+                            "total_tokens",
+                            len(
+                                result[
+                                    "token_balances"
+                                ]
+                            )
+                        )
+                    )
+
+                else:
+                    result["token_balances"] = []
+                    result["total_tokens"] = 0
+
+                    if isinstance(
+                        token_result,
+                        dict
+                    ):
+                        logger.warning(
+                            "Could not retrieve token holdings "
+                            "for wallet %s: %s",
+                            wallet_id,
+                            token_result.get(
+                                "error"
+                            ),
+                        )
+
+            except Exception as e:
+                # Token retrieval should never prevent the wallet report
+                # itself from being returned.
+                logger.warning(
+                    "Could not retrieve token balances "
+                    "for wallet %s: %s",
+                    wallet_id,
+                    e,
+                )
+
+                result["token_balances"] = []
+                result["total_tokens"] = 0
+
+            # ------------------------------------------------------------------
+            # Return complete wallet report
+            # ------------------------------------------------------------------
 
             return result
 
         except Exception as e:
-            logger.error(f"Error getting wallet report: {e}")
-            return {"error": str(e)}
+            logger.error(
+                f"Error getting wallet report: {e}"
+            )
 
+            return {
+                "error": str(e)
+            }
     def get_transaction_history(
         self, 
         wallet_id: str, 

@@ -1,42 +1,48 @@
-import React, { useState, useEffect } from 'react';
+// ============================================================================
+// Universal Blockchain Platform (UBP)
+// Mobile Application
+// ============================================================================
+
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
+
 import {
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   Pressable,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Clipboard from '@react-native-clipboard/clipboard';
 
 // ============================================================================
 // UBP Mobile API Configuration
 // ============================================================================
 
-const API_URL = 'http://localhost:5000';
-
-const MOBILE_API_URL = `${API_URL}/api/mobile`;
-
-const STORAGE_KEYS = {
-  TOKEN: 'token',
-  USER: 'user',
-  IS_LOGGED_IN: 'isLoggedIn',
-};
-
+const MOBILE_API_URL = 'http://localhost:5000/api/mobile';
 
 // ============================================================================
-// API Helpers
+// Storage Keys
 // ============================================================================
 
-/**
- * Parse a JSON response safely.
- */
+const AUTH_TOKEN_KEY = 'ubp_auth_token';
+const USER_KEY = 'ubp_user';
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
 const parseResponse = async (response) => {
   try {
     return await response.json();
@@ -48,86 +54,186 @@ const parseResponse = async (response) => {
   }
 };
 
-
 /**
- * Store authentication information locally.
+ * Centralized authenticated API request helper.
  */
-const storeAuthentication = async (token, user) => {
+const authenticatedFetch = async (path, options = {}) => {
+  const token = await getAuthToken();
+
   if (!token) {
-    throw new Error('Authentication token was not returned by the server');
+    const error = new Error('Authentication token is missing');
+    error.code = 'AUTH_REQUIRED';
+    throw error;
   }
 
-  await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+    'Authorization': `Bearer ${token}`,
+  };
 
-  if (user) {
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.USER,
-      JSON.stringify(user)
+  const response = await fetch(
+    `${MOBILE_API_URL}${path}`,
+    {
+      ...options,
+      headers,
+    }
+  );
+
+  const data = await parseResponse(response);
+
+  return { response, data };
+};
+
+const isUnauthorizedResponse = (response) => (
+  response.status === 401
+);
+
+const handleUnauthorized = async (navigation, showAlert = true) => {
+  await clearAuthentication();
+
+  if (showAlert) {
+    Alert.alert('Session Expired', 'Please sign in again.');
+  }
+
+  navigation.replace('Login');
+};
+
+// ============================================================================
+// Authentication Storage
+// ============================================================================
+
+const getAuthToken = async () => {
+  try {
+    return await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+  } catch (error) {
+    console.error(
+      'Failed to retrieve authentication token:',
+      error
+    );
+
+    return null;
+  }
+};
+
+const storeAuthentication = async (
+  token,
+  user
+) => {
+  try {
+    await AsyncStorage.multiSet([
+      [AUTH_TOKEN_KEY, token],
+      [USER_KEY, JSON.stringify(user)],
+    ]);
+
+    console.log(
+      'Authentication credentials stored successfully'
+    );
+  } catch (error) {
+    console.error(
+      'Failed to store authentication:',
+      error
+    );
+
+    throw error;
+  }
+};
+
+const clearAuthentication = async () => {
+  try {
+    await AsyncStorage.multiRemove([
+      AUTH_TOKEN_KEY,
+      USER_KEY,
+    ]);
+
+    console.log(
+      'Authentication credentials cleared'
+    );
+  } catch (error) {
+    console.error(
+      'Failed to clear authentication:',
+      error
     );
   }
-
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.IS_LOGGED_IN,
-    'true'
-  );
 };
 
-
-/**
- * Clear authentication information.
- */
-const clearAuthentication = async () => {
-  await AsyncStorage.multiRemove([
-    STORAGE_KEYS.TOKEN,
-    STORAGE_KEYS.USER,
-    STORAGE_KEYS.IS_LOGGED_IN,
-  ]);
-};
-
-
-/**
- * Retrieve the stored authentication token.
- */
-const getAuthToken = async () => {
-  return await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
-};
-
-
-/**
- * Retrieve the stored user.
- */
 const getStoredUser = async () => {
-  const user = await AsyncStorage.getItem(STORAGE_KEYS.USER);
-
-  if (!user) {
-    return null;
-  }
-
   try {
+    const user = await AsyncStorage.getItem(USER_KEY);
+
+    if (!user) {
+      return null;
+    }
+
     return JSON.parse(user);
   } catch (error) {
-    console.error('Unable to parse stored user:', error);
+    console.error(
+      'Failed to retrieve stored user:',
+      error
+    );
+
     return null;
   }
 };
 
+// ============================================================================
+// Clipboard
+// ============================================================================
+
+/**
+ * Copy text to clipboard and show feedback.
+ */
+const copyToClipboard = (
+  text,
+  label = 'Address'
+) => {
+  Clipboard.setString(text);
+
+  Alert.alert(
+    '✅ Copied!',
+    `${label} copied to clipboard.`
+  );
+};
 
 // ============================================================================
 // Login Screen
 // ============================================================================
 
-const LoginScreen = ({ navigation }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+const LoginScreen = ({
+  onLogin,
+  onNavigateRegister,
+}) => {
+  const [
+    username,
+    setUsername,
+  ] = useState('');
 
+  const [
+    password,
+    setPassword,
+  ] = useState('');
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
   const handleLogin = async () => {
-    if (!username.trim() || !password) {
+    if (!username.trim()) {
       Alert.alert(
-        'Error',
-        'Please enter your username and password.'
+        'Validation Error',
+        'Please enter your username.'
       );
+
+      return;
+    }
+
+    if (!password) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter your password.'
+      );
+
       return;
     }
 
@@ -150,86 +256,100 @@ const LoginScreen = ({ navigation }) => {
 
       const data = await parseResponse(response);
 
-      if (response.ok && data.success && data.token) {
-        await storeAuthentication(
-          data.token,
-          data.user
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || 'Login failed'
         );
-
-        navigation.replace('Dashboard');
-        return;
       }
+
+      if (!data.token) {
+        throw new Error(
+          'Authentication token was not returned by the server.'
+        );
+      }
+
+      await storeAuthentication(
+        data.token,
+        data.user
+      );
+
+      onLogin(
+        data.token,
+        data.user
+      );
+    } catch (error) {
+      console.error(
+        'Login error:',
+        error
+      );
 
       Alert.alert(
         'Login Failed',
-        data.error || 'Unable to sign in.'
+        error.message ||
+          'Unable to sign in. Please try again.'
       );
-
-    } catch (error) {
-      console.error('Mobile login error:', error);
-
-      Alert.alert(
-        'Network Error',
-        'Unable to connect to the UBP server. Please check that the server is running.'
-      );
-
     } finally {
       setLoading(false);
     }
   };
 
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>🌐 UBP</Text>
+    <View style={styles.screen}>
+      <View style={styles.authContainer}>
 
-      <Text style={styles.subtitle}>
-        Sign in to your account
-      </Text>
+        <Text style={styles.logo}>
+          UBP
+        </Text>
 
-      <View style={styles.form}>
+        <Text style={styles.title}>
+          Universal Blockchain Platform
+        </Text>
+
+        <Text style={styles.subtitle}>
+          Sign in to your wallet
+        </Text>
 
         <TextInput
           style={styles.input}
           placeholder="Username"
-          placeholderTextColor="#6a7a8e"
+          placeholderTextColor="#888"
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
           autoCorrect={false}
-          editable={!loading}
         />
 
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="#6a7a8e"
+          placeholderTextColor="#888"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          editable={!loading}
+          autoCapitalize="none"
         />
 
         <TouchableOpacity
-          style={styles.button}
+          style={styles.primaryButton}
           onPress={handleLogin}
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="white" />
+            <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>
+            <Text style={styles.primaryButtonText}>
               Sign In
             </Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => navigation.navigate('Register')}
+          style={styles.secondaryButton}
+          onPress={onNavigateRegister}
           disabled={loading}
         >
-          <Text style={styles.link}>
-            Don't have an account? Register
+          <Text style={styles.secondaryButtonText}>
+            Create Account
           </Text>
         </TouchableOpacity>
 
@@ -238,46 +358,73 @@ const LoginScreen = ({ navigation }) => {
   );
 };
 
-
 // ============================================================================
-// Register Screen
+// Registration Screen
 // ============================================================================
 
-const RegisterScreen = ({ navigation }) => {
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+const RegisterScreen = ({
+  onRegisterSuccess,
+  onNavigateLogin,
+}) => {
+  const [
+    username,
+    setUsername,
+  ] = useState('');
 
+  const [
+    email,
+    setEmail,
+  ] = useState('');
+
+  const [
+    password,
+    setPassword,
+  ] = useState('');
+
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState('');
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
   const handleRegister = async () => {
-    if (
-      !username.trim() ||
-      !email.trim() ||
-      !password ||
-      !confirmPassword
-    ) {
+    if (!username.trim()) {
       Alert.alert(
-        'Error',
-        'Please fill in all fields.'
+        'Validation Error',
+        'Please enter a username.'
       );
+
+      return;
+    }
+
+    if (!email.trim()) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter your email address.'
+      );
+
+      return;
+    }
+
+    if (!password) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter a password.'
+      );
+
       return;
     }
 
     if (password !== confirmPassword) {
       Alert.alert(
-        'Error',
+        'Validation Error',
         'Passwords do not match.'
       );
-      return;
-    }
 
-    if (password.length < 8) {
-      Alert.alert(
-        'Error',
-        'Password must be at least 8 characters.'
-      );
       return;
     }
 
@@ -301,111 +448,108 @@ const RegisterScreen = ({ navigation }) => {
 
       const data = await parseResponse(response);
 
-      if (response.ok && data.success && data.token) {
-        await storeAuthentication(
-          data.token,
-          data.user
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || 'Registration failed'
         );
-
-        navigation.replace('Dashboard');
-        return;
       }
 
       Alert.alert(
-        'Registration Failed',
-        data.error || 'Unable to create your account.'
+        'Account Created',
+        'Your account has been created successfully. Please sign in.',
+        [
+          {
+            text: 'OK',
+            onPress: onRegisterSuccess,
+          },
+        ]
       );
-
     } catch (error) {
       console.error(
-        'Mobile registration error:',
+        'Registration error:',
         error
       );
 
       Alert.alert(
-        'Network Error',
-        'Unable to connect to the UBP server. Please try again.'
+        'Registration Failed',
+        error.message ||
+          'Unable to create your account.'
       );
-
     } finally {
       setLoading(false);
     }
   };
 
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>🌐 UBP</Text>
+    <View style={styles.screen}>
+      <View style={styles.authContainer}>
 
-      <Text style={styles.subtitle}>
-        Create your account
-      </Text>
+        <Text style={styles.logo}>
+          UBP
+        </Text>
 
-      <View style={styles.form}>
+        <Text style={styles.title}>
+          Create Account
+        </Text>
 
         <TextInput
           style={styles.input}
           placeholder="Username"
-          placeholderTextColor="#6a7a8e"
+          placeholderTextColor="#888"
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
-          autoCorrect={false}
-          editable={!loading}
         />
 
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor="#6a7a8e"
+          placeholderTextColor="#888"
           value={email}
           onChangeText={setEmail}
-          autoCapitalize="none"
-          autoCorrect={false}
           keyboardType="email-address"
-          editable={!loading}
+          autoCapitalize="none"
         />
 
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="#6a7a8e"
+          placeholderTextColor="#888"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          editable={!loading}
         />
 
         <TextInput
           style={styles.input}
           placeholder="Confirm Password"
-          placeholderTextColor="#6a7a8e"
+          placeholderTextColor="#888"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry
-          editable={!loading}
         />
 
         <TouchableOpacity
-          style={styles.button}
+          style={styles.primaryButton}
           onPress={handleRegister}
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="white" />
+            <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>
+            <Text style={styles.primaryButtonText}>
               Create Account
             </Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => navigation.navigate('Login')}
+          style={styles.secondaryButton}
+          onPress={onNavigateLogin}
           disabled={loading}
         >
-          <Text style={styles.link}>
-            Already have an account? Sign In
+          <Text style={styles.secondaryButtonText}>
+            Back to Sign In
           </Text>
         </TouchableOpacity>
 
@@ -414,909 +558,2286 @@ const RegisterScreen = ({ navigation }) => {
   );
 };
 
+// ============================================================================
+// Create Wallet Modal
+// ============================================================================
+
+const CreateWalletModal = ({
+  visible,
+  onClose,
+  onCreated,
+}) => {
+  const [
+    blockchain,
+    setBlockchain,
+  ] = useState('ethereum');
+
+  const [
+    label,
+    setLabel,
+  ] = useState('');
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const createWallet = async () => {
+    if (!label.trim()) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter a wallet label.'
+      );
+
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { response, data } =
+        await authenticatedFetch(
+          '/wallets/create',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              blockchain: blockchain,
+              label: label.trim(),
+            }),
+          }
+        );
+
+      if (isUnauthorizedResponse(response)) {
+        await clearAuthentication();
+
+        onClose();
+
+        Alert.alert(
+          'Session Expired',
+          'Please sign in again.'
+        );
+
+        return;
+      }
+
+      if (data.success) {
+        Alert.alert(
+          'Wallet Created',
+          'Your wallet was created successfully.'
+        );
+
+        setLabel('');
+        onClose();
+
+        if (onCreated) {
+          onCreated(data.wallet);
+        }
+      } else {
+        throw new Error(
+          data.error || 'Unable to create wallet.'
+        );
+      }
+    } catch (error) {
+      console.error(
+        'Create wallet error:',
+        error
+      );
+
+      Alert.alert(
+        'Wallet Creation Failed',
+        error.message ||
+          'Unable to create wallet.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+
+        <View style={styles.modalContainer}>
+
+          <Text style={styles.modalTitle}>
+            Create Wallet
+          </Text>
+
+          <Text style={styles.fieldLabel}>
+            Blockchain
+          </Text>
+
+          <View style={styles.blockchainRow}>
+
+            <TouchableOpacity
+              style={[
+                styles.blockchainButton,
+                blockchain === 'ethereum' &&
+                  styles.blockchainButtonActive,
+              ]}
+              onPress={() =>
+                setBlockchain('ethereum')
+              }
+            >
+              <Text
+                style={[
+                  styles.blockchainButtonText,
+                  blockchain === 'ethereum' &&
+                    styles.blockchainButtonTextActive,
+                ]}
+              >
+                Ethereum
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.blockchainButton,
+                blockchain === 'bitcoin' &&
+                  styles.blockchainButtonActive,
+              ]}
+              onPress={() =>
+                setBlockchain('bitcoin')
+              }
+            >
+              <Text
+                style={[
+                  styles.blockchainButtonText,
+                  blockchain === 'bitcoin' &&
+                    styles.blockchainButtonTextActive,
+                ]}
+              >
+                Bitcoin
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+
+          <Text style={styles.fieldLabel}>
+            Wallet Label
+          </Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Main Wallet"
+            placeholderTextColor="#888"
+            value={label}
+            onChangeText={setLabel}
+          />
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={createWallet}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                Create Wallet
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={onClose}
+            disabled={loading}
+          >
+            <Text style={styles.secondaryButtonText}>
+              Cancel
+            </Text>
+          </TouchableOpacity>
+
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 // ============================================================================
 // Send Transaction Modal
 // ============================================================================
 
-const SendTransactionModal = ({ visible, onClose, onSuccess, wallet, token }) => {
-  const [toAddress, setToAddress] = useState('');
-  const [amount, setAmount] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [asset, setAsset] = useState('ETH');
+const SendTransactionModal = ({
+  visible,
+  wallet,
+  onClose,
+  onSent,
+}) => {
+  const [
+    toAddress,
+    setToAddress,
+  ] = useState('');
 
-  useEffect(() => {
-    if (wallet) {
-      const assetMap = {
-        'ethereum': 'ETH',
-        'bitcoin': 'BTC',
-        'tron': 'TRX',
-      };
-      setAsset(assetMap[wallet.blockchain] || 'ETH');
-    }
-  }, [wallet]);
+  const [
+    amount,
+    setAmount,
+  ] = useState('');
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
   const handleSend = async () => {
-    if (!toAddress.trim()) {
-      Alert.alert('Error', 'Please enter a recipient address.');
+    if (!wallet) {
+      Alert.alert(
+        'Error',
+        'No wallet selected.'
+      );
+
       return;
     }
 
-    const amountNum = parseFloat(amount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount.');
+    if (!toAddress.trim()) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter the destination address.'
+      );
+
+      return;
+    }
+
+    const amountNum = Number(amount);
+
+    if (
+      !amount ||
+      Number.isNaN(amountNum) ||
+      amountNum <= 0
+    ) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter a valid amount.'
+      );
+
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${MOBILE_API_URL}/wallets/${wallet.wallet_id}/send`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            to_address: toAddress.trim(),
-            amount: amountNum,
-          }),
-        }
-      );
+      const { response, data } =
+        await authenticatedFetch(
+          `/wallets/${wallet.wallet_id}/send`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              to_address: toAddress.trim(),
+              amount: amountNum,
+            }),
+          }
+        );
 
-      const data = await parseResponse(response);
+      if (isUnauthorizedResponse(response)) {
+        await clearAuthentication();
+
+        onClose();
+
+        Alert.alert(
+          'Session Expired',
+          'Please sign in again.'
+        );
+
+        return;
+      }
 
       if (data.success) {
         Alert.alert(
-          '✅ Transaction Sent',
-          `Transaction sent successfully!\n\nTx Hash: ${data.transaction.tx_hash.slice(0, 16)}...\nAmount: ${data.transaction.amount} ${data.transaction.asset}\nStatus: ${data.transaction.status}`
+          'Transaction Submitted',
+          data.message ||
+            'Your transaction has been submitted.'
         );
+
         setToAddress('');
         setAmount('');
-        onSuccess();
+
         onClose();
+
+        if (onSent) {
+          onSent(data);
+        }
       } else {
-        Alert.alert('Error', data.error || 'Failed to send transaction.');
+        throw new Error(
+          data.error ||
+            'Transaction could not be submitted.'
+        );
       }
     } catch (error) {
-      console.error('Send transaction error:', error);
-      Alert.alert('Error', 'Unable to send transaction. Please try again.');
+      console.error(
+        'Send transaction error:',
+        error
+      );
+
+      Alert.alert(
+        'Transaction Failed',
+        error.message ||
+          'Unable to send transaction.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  if (!wallet) return null;
-
-  const displayAddress = wallet.address.slice(0, 16) + '...';
-
   return (
     <Modal
       visible={visible}
-      transparent={true}
+      transparent
       animationType="slide"
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>📤 Send {asset}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.modalClose}>
-              <Text style={styles.modalCloseText}>✕</Text>
-            </TouchableOpacity>
-          </View>
 
-          <View style={styles.modalBody}>
-            <View style={styles.sendFromInfo}>
-              <Text style={styles.sendFromLabel}>From:</Text>
-              <Text style={styles.sendFromAddress}>{displayAddress}</Text>
-              <Text style={styles.sendFromBlockchain}>{wallet.blockchain.toUpperCase()} • {wallet.label}</Text>
+        <View style={styles.modalContainer}>
+
+          <Text style={styles.modalTitle}>
+            Send Transaction
+          </Text>
+
+          {wallet && (
+            <View style={styles.selectedWalletBox}>
+              <Text style={styles.selectedWalletLabel}>
+                From
+              </Text>
+
+              <Text style={styles.selectedWalletValue}>
+                {wallet.label ||
+                  wallet.wallet_id}
+              </Text>
+
+              <Text
+                style={styles.addressText}
+                numberOfLines={1}
+              >
+                {wallet.address}
+              </Text>
             </View>
+          )}
 
-            <Text style={styles.modalLabel}>Recipient Address</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="0x..."
-              placeholderTextColor="#6a7a8e"
-              value={toAddress}
-              onChangeText={setToAddress}
-              editable={!loading}
-              autoCapitalize="none"
-            />
+          <Text style={styles.fieldLabel}>
+            Destination Address
+          </Text>
 
-            <Text style={styles.modalLabel}>Amount ({asset})</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="0.001"
-              placeholderTextColor="#6a7a8e"
-              value={amount}
-              onChangeText={setAmount}
-              editable={!loading}
-              keyboardType="decimal-pad"
-            />
+          <TextInput
+            style={styles.input}
+            placeholder="Enter destination address"
+            placeholderTextColor="#888"
+            value={toAddress}
+            onChangeText={setToAddress}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
 
-            <TouchableOpacity
-              style={[styles.modalButton, loading && styles.modalButtonDisabled]}
-              onPress={handleSend}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="white" size="small" />
-              ) : (
-                <Text style={styles.modalButtonText}>Send {asset}</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.fieldLabel}>
+            Amount
+          </Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Enter amount"
+            placeholderTextColor="#888"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="decimal-pad"
+          />
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleSend}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                Send
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={onClose}
+            disabled={loading}
+          >
+            <Text style={styles.secondaryButtonText}>
+              Cancel
+            </Text>
+          </TouchableOpacity>
+
         </View>
       </View>
     </Modal>
   );
 };
-
-
 // ============================================================================
-// Wallet Creation Modal
+// Wallet Card
 // ============================================================================
 
-const CreateWalletModal = ({ visible, onClose, onSuccess, token }) => {
-  const [blockchain, setBlockchain] = useState('ethereum');
-  const [label, setLabel] = useState('');
-  const [loading, setLoading] = useState(false);
+const WalletCard = ({
+  wallet,
+  onSend,
+  onReceive,
+  onInspect,
+}) => {
+  if (!wallet) {
+    return null;
+  }
 
-  const blockchainOptions = [
-    { value: 'ethereum', label: '🟣 Ethereum', color: '#6c5ce7' },
-    { value: 'bitcoin', label: '🟠 Bitcoin', color: '#f7931a' },
-    { value: 'tron', label: '🔴 TRON', color: '#ef4444' },
-  ];
+  const blockchain =
+    wallet.blockchain ||
+    wallet.network ||
+    'Unknown';
 
-  const handleCreate = async () => {
-    if (!label.trim()) {
-      Alert.alert('Error', 'Please enter a wallet label.');
+  const address =
+    wallet.address ||
+    'Address unavailable';
+
+  const balance =
+    wallet.balance !== undefined &&
+    wallet.balance !== null
+      ? wallet.balance
+      : '0';
+const blockchainName =
+  String(blockchain).toLowerCase();
+
+const asset =
+  wallet.asset ||
+  wallet.symbol ||
+  (
+    blockchainName === 'bitcoin'
+      ? 'BTC'
+      : blockchainName === 'tron' ||
+        blockchainName === 'trc20'
+        ? 'USDT'
+        : 'ETH'
+  );
+  return (
+    <View style={styles.walletCard}>
+
+      <View style={styles.walletHeader}>
+
+        <View style={styles.walletHeaderLeft}>
+          <Text style={styles.walletLabel}>
+            {wallet.label ||
+              'Unnamed Wallet'}
+          </Text>
+
+          <Text style={styles.walletBlockchain}>
+            {blockchain.toUpperCase()}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.inspectButton}
+          onPress={() => onInspect(wallet)}
+        >
+          <Text style={styles.inspectButtonText}>
+            Inspect
+          </Text>
+        </TouchableOpacity>
+
+      </View>
+
+      <Text style={styles.walletBalance}>
+        {balance} {asset}
+      </Text>
+
+      <TouchableOpacity
+        onPress={() =>
+          copyToClipboard(
+            address,
+            'Wallet address'
+          )
+        }
+      >
+        <Text
+          style={styles.walletAddress}
+          numberOfLines={1}
+          ellipsizeMode="middle"
+        >
+          {address}
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.walletActions}>
+
+        <TouchableOpacity
+          style={styles.walletActionButton}
+          onPress={() => onSend(wallet)}
+        >
+          <Text style={styles.walletActionText}>
+            Send
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.walletActionButton}
+          onPress={() => onReceive(wallet)}
+        >
+          <Text style={styles.walletActionText}>
+            Receive
+          </Text>
+        </TouchableOpacity>
+
+      </View>
+
+    </View>
+  );
+};
+
+// ============================================================================
+// Receive Wallet Modal
+// ============================================================================
+
+const ReceiveWalletModal = ({
+  visible,
+  wallet,
+  onClose,
+}) => {
+  if (!wallet) {
+    return null;
+  }
+
+  const address =
+    wallet.address ||
+    'Address unavailable';
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+
+        <View style={styles.modalContainer}>
+
+          <Text style={styles.modalTitle}>
+            Receive
+          </Text>
+
+          <Text style={styles.receiveDescription}>
+            Send funds to this wallet address.
+          </Text>
+
+          <View style={styles.receiveAddressBox}>
+
+            <Text
+              style={styles.receiveAddress}
+              selectable
+            >
+              {address}
+            </Text>
+
+          </View>
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() =>
+              copyToClipboard(
+                address,
+                'Wallet address'
+              )
+            }
+          >
+            <Text style={styles.primaryButtonText}>
+              Copy Address
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={async () => {
+              try {
+                await Share.share({
+                  message: address,
+                });
+              } catch (error) {
+                console.error(
+                  'Share address error:',
+                  error
+                );
+              }
+            }}
+          >
+            <Text style={styles.secondaryButtonText}>
+              Share Address
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={onClose}
+          >
+            <Text style={styles.secondaryButtonText}>
+              Close
+            </Text>
+          </TouchableOpacity>
+
+        </View>
+
+      </View>
+    </Modal>
+  );
+};
+
+// ============================================================================
+// Wallet Inspection Modal
+// ============================================================================
+
+const WalletInspectionModal = ({
+  visible,
+  wallet,
+  onClose,
+}) => {
+  const [
+    inspection,
+    setInspection,
+  ] = useState(null);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState(null);
+
+  useEffect(() => {
+    if (!visible || !wallet) {
+      setInspection(null);
+      setError(null);
       return;
     }
 
-    setLoading(true);
+    let mounted = true;
 
-    try {
-      const response = await fetch(
-        `${MOBILE_API_URL}/wallets/create`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            blockchain: blockchain,
-            label: label.trim(),
-          }),
-        }
-      );
+    const loadInspection = async () => {
+      setLoading(true);
+      setError(null);
 
-      const data = await parseResponse(response);
-
-      if (data.success) {
-        Alert.alert(
-          '✅ Wallet Created',
-          `${blockchain.charAt(0).toUpperCase() + blockchain.slice(1)} wallet created successfully!\n\nAddress: ${data.wallet.address.slice(0, 16)}...`
+      try {
+        const {
+          response,
+          data,
+        } = await authenticatedFetch(
+          `/wallets/${wallet.wallet_id}/inspect`
         );
-        setLabel('');
-        onSuccess();
-        onClose();
-      } else {
-        Alert.alert('Error', data.error || 'Failed to create wallet.');
+
+        if (response.status === 401) {
+          if (mounted) {
+            setError(
+              'Your session has expired.'
+            );
+          }
+
+          return;
+        }
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error ||
+              'Unable to inspect wallet.'
+          );
+        }
+
+        if (mounted) {
+          setInspection(data.wallet);
+        }
+      } catch (err) {
+        console.error(
+          'Wallet inspection error:',
+          err
+        );
+
+        if (mounted) {
+          setError(
+            err.message ||
+              'Unable to inspect wallet.'
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      console.error('Create wallet error:', error);
-      Alert.alert('Error', 'Unable to create wallet. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    loadInspection();
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    visible,
+    wallet,
+  ]);
+
+  const renderToken = ({
+    item,
+  }) => (
+    <View style={styles.tokenRow}>
+
+      <View style={styles.tokenInfo}>
+        <Text style={styles.tokenName}>
+          {item.name ||
+            item.symbol ||
+            'Unknown Token'}
+        </Text>
+
+        <Text style={styles.tokenSymbol}>
+          {item.symbol ||
+            'TOKEN'}
+        </Text>
+      </View>
+
+      <Text style={styles.tokenBalance}>
+        {item.balance_formatted ??
+          item.balance ??
+          '0'}
+      </Text>
+
+    </View>
+  );
 
   return (
     <Modal
       visible={visible}
-      transparent={true}
+      transparent
       animationType="slide"
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+
+        <View style={styles.largeModalContainer}>
+
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>➕ Create Wallet</Text>
-            <TouchableOpacity onPress={onClose} style={styles.modalClose}>
-              <Text style={styles.modalCloseText}>✕</Text>
-            </TouchableOpacity>
-          </View>
 
-          <View style={styles.modalBody}>
-            <Text style={styles.modalLabel}>Select Blockchain</Text>
-            <View style={styles.blockchainOptions}>
-              {blockchainOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.blockchainOption,
-                    blockchain === option.value && {
-                      borderColor: option.color,
-                      backgroundColor: `${option.color}15`,
-                    },
-                  ]}
-                  onPress={() => setBlockchain(option.value)}
-                >
-                  <Text style={styles.blockchainOptionText}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.modalLabel}>Wallet Label</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g., My ETH Wallet"
-              placeholderTextColor="#6a7a8e"
-              value={label}
-              onChangeText={setLabel}
-              editable={!loading}
-            />
+            <Text style={styles.modalTitle}>
+              Wallet Inspection
+            </Text>
 
             <TouchableOpacity
-              style={[styles.modalButton, loading && styles.modalButtonDisabled]}
-              onPress={handleCreate}
-              disabled={loading}
+              onPress={onClose}
             >
-              {loading ? (
-                <ActivityIndicator color="white" size="small" />
-              ) : (
-                <Text style={styles.modalButtonText}>Create Wallet</Text>
-              )}
+              <Text style={styles.closeButton}>
+                ✕
+              </Text>
             </TouchableOpacity>
+
           </View>
+
+          {loading && (
+            <View style={styles.loadingContainer}>
+
+              <ActivityIndicator
+                size="large"
+              />
+
+              <Text style={styles.loadingText}>
+                Loading wallet information...
+              </Text>
+
+            </View>
+          )}
+
+          {!loading && error && (
+            <View style={styles.errorContainer}>
+
+              <Text style={styles.errorText}>
+                {error}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={onClose}
+              >
+                <Text
+                  style={
+                    styles.secondaryButtonText
+                  }
+                >
+                  Close
+                </Text>
+              </TouchableOpacity>
+
+            </View>
+          )}
+
+          {!loading &&
+            !error &&
+            inspection && (
+              <FlatList
+                data={
+                  inspection.token_balances ||
+                  inspection.tokens ||
+                  []
+                }
+                keyExtractor={(
+                  item,
+                  index
+                ) =>
+                  item.contract_address ||
+                  item.symbol ||
+                  `${index}`
+                }
+                renderItem={renderToken}
+                ListHeaderComponent={() => (
+                  <View>
+
+                    <View
+                      style={
+                        styles.inspectionSection
+                      }
+                    >
+
+                      <Text
+                        style={
+                          styles.sectionTitle
+                        }
+                      >
+                        Wallet Information
+                      </Text>
+
+                      <View
+                        style={
+                          styles.infoRow
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.infoLabel
+                          }
+                        >
+                          Address
+                        </Text>
+
+                        <TouchableOpacity
+                          onPress={() =>
+                            copyToClipboard(
+                              inspection.address,
+                              'Wallet address'
+                            )
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.infoValue
+                            }
+                            numberOfLines={2}
+                            ellipsizeMode="middle"
+                          >
+                            {inspection.address ||
+                              'N/A'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View
+                        style={
+                          styles.infoRow
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.infoLabel
+                          }
+                        >
+                          Blockchain
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.infoValue
+                          }
+                        >
+                          {inspection.blockchain ||
+                            'N/A'}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={
+                          styles.infoRow
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.infoLabel
+                          }
+                        >
+                          Network
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.infoValue
+                          }
+                        >
+                          {inspection.network ||
+                            'mainnet'}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={
+                          styles.infoRow
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.infoLabel
+                          }
+                        >
+                          Balance
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.infoValue
+                          }
+                        >
+                          {inspection.balance ??
+                            '0'}{' '}
+                          {inspection.asset ||
+                            ''}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={
+                          styles.infoRow
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.infoLabel
+                          }
+                        >
+                          Wallet Type
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.infoValue
+                          }
+                        >
+                          {inspection.classification ||
+                            'EOA'}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={
+                          styles.infoRow
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.infoLabel
+                          }
+                        >
+                          Contract
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.infoValue
+                          }
+                        >
+                          {inspection.is_contract
+                            ? 'Yes'
+                            : 'No'}
+                        </Text>
+                      </View>
+
+                      {inspection.nonce !==
+                        undefined && (
+                        <View
+                          style={
+                            styles.infoRow
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.infoLabel
+                            }
+                          >
+                            Nonce
+                          </Text>
+
+                          <Text
+                            style={
+                              styles.infoValue
+                            }
+                          >
+                            {inspection.nonce}
+                          </Text>
+                        </View>
+                      )}
+
+                      {inspection.transaction_count !==
+                        undefined && (
+                        <View
+                          style={
+                            styles.infoRow
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.infoLabel
+                            }
+                          >
+                            Transactions
+                          </Text>
+
+                          <Text
+                            style={
+                              styles.infoValue
+                            }
+                          >
+                            {
+                              inspection.transaction_count
+                            }
+                          </Text>
+                        </View>
+                      )}
+
+                    </View>
+
+                    <Text
+                      style={
+                        styles.sectionTitle
+                      }
+                    >
+                      Token Holdings
+                    </Text>
+
+                    {(
+                      inspection.token_balances ||
+                      inspection.tokens ||
+                      []
+                    ).length === 0 && (
+                      <Text
+                        style={
+                          styles.emptyText
+                        }
+                      >
+                        No token holdings found.
+                      </Text>
+                    )}
+
+                  </View>
+                )}
+              />
+            )}
+
         </View>
       </View>
     </Modal>
   );
 };
 
+// ============================================================================
+// Transaction History Modal
+// ============================================================================
+
+const TransactionHistoryModal = ({
+  visible,
+  wallet,
+  onClose,
+}) => {
+  const [
+    transactions,
+    setTransactions,
+  ] = useState([]);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState(null);
+
+  const loadTransactions = useCallback(
+    async () => {
+      if (!wallet) {
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const {
+          response,
+          data,
+        } = await authenticatedFetch(
+          `/wallets/${wallet.wallet_id}/transactions`
+        );
+
+        if (response.status === 401) {
+          throw new Error(
+            'Your session has expired.'
+          );
+        }
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error ||
+              'Unable to load transaction history.'
+          );
+        }
+
+        setTransactions(
+          data.transactions || []
+        );
+      } catch (err) {
+        console.error(
+          'Transaction history error:',
+          err
+        );
+
+        setError(
+          err.message ||
+            'Unable to load transactions.'
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [wallet]
+  );
+
+  useEffect(() => {
+    if (visible) {
+      loadTransactions();
+    }
+  }, [
+    visible,
+    loadTransactions,
+  ]);
+
+  const renderTransaction = ({
+    item,
+  }) => {
+    const status =
+      item.status ||
+      item.state ||
+      'unknown';
+
+    const hash =
+      item.tx_hash ||
+      item.transaction_hash ||
+      item.hash ||
+      '';
+
+    const amount =
+      item.amount !== undefined
+        ? item.amount
+        : '';
+
+    return (
+      <View style={styles.transactionRow}>
+
+        <View style={styles.transactionMain}>
+
+          <Text
+            style={styles.transactionHash}
+            numberOfLines={1}
+            ellipsizeMode="middle"
+          >
+            {hash || 'Transaction'}
+          </Text>
+
+          <Text
+            style={styles.transactionMeta}
+          >
+            {item.timestamp ||
+              item.created_at ||
+              ''}
+          </Text>
+
+        </View>
+
+        <View
+          style={
+            styles.transactionRight
+          }
+        >
+
+          <Text
+            style={
+              styles.transactionAmount
+            }
+          >
+            {amount}
+          </Text>
+
+          <Text
+            style={[
+              styles.transactionStatus,
+              status === 'confirmed' &&
+                styles.statusConfirmed,
+              status === 'failed' &&
+                styles.statusFailed,
+            ]}
+          >
+            {status}
+          </Text>
+
+        </View>
+
+      </View>
+    );
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+
+        <View style={styles.largeModalContainer}>
+
+          <View style={styles.modalHeader}>
+
+            <Text style={styles.modalTitle}>
+              Transaction History
+            </Text>
+
+            <TouchableOpacity
+              onPress={onClose}
+            >
+              <Text style={styles.closeButton}>
+                ✕
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+
+          {loading && (
+            <View style={styles.loadingContainer}>
+
+              <ActivityIndicator
+                size="large"
+              />
+
+              <Text style={styles.loadingText}>
+                Loading transactions...
+              </Text>
+
+            </View>
+          )}
+
+          {!loading && error && (
+            <View style={styles.errorContainer}>
+
+              <Text style={styles.errorText}>
+                {error}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={loadTransactions}
+              >
+                <Text
+                  style={
+                    styles.secondaryButtonText
+                  }
+                >
+                  Retry
+                </Text>
+              </TouchableOpacity>
+
+            </View>
+          )}
+
+          {!loading &&
+            !error && (
+              <FlatList
+                data={transactions}
+                keyExtractor={(
+                  item,
+                  index
+                ) =>
+                  item.tx_hash ||
+                  item.transaction_hash ||
+                  item.hash ||
+                  `${index}`
+                }
+                renderItem={
+                  renderTransaction
+                }
+                ListEmptyComponent={() => (
+                  <View
+                    style={
+                      styles.emptyContainer
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.emptyText
+                      }
+                    >
+                      No transactions found.
+                    </Text>
+                  </View>
+                )}
+              />
+            )}
+
+        </View>
+
+      </View>
+    </Modal>
+  );
+};
 
 // ============================================================================
 // Dashboard Screen
 // ============================================================================
 
-const DashboardScreen = ({ navigation }) => {
-  const [stats, setStats] = useState({
-    total_wallets: 0,
-    total_transactions: 0,
-    by_blockchain: {
-      ethereum: { wallets: 0, transactions: 0 },
-      bitcoin: { wallets: 0, transactions: 0 },
-      tron: { wallets: 0, transactions: 0 },
+const DashboardScreen = ({
+  navigation,
+  user,
+  onLogout,
+}) => {
+  const [
+    wallets,
+    setWallets,
+  ] = useState([]);
+
+  const [
+    stats,
+    setStats,
+  ] = useState(null);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
+
+  const [
+    createWalletVisible,
+    setCreateWalletVisible,
+  ] = useState(false);
+
+  const [
+    sendVisible,
+    setSendVisible,
+  ] = useState(false);
+
+  const [
+    receiveVisible,
+    setReceiveVisible,
+  ] = useState(false);
+
+  const [
+    inspectionVisible,
+    setInspectionVisible,
+  ] = useState(false);
+
+  const [
+    historyVisible,
+    setHistoryVisible,
+  ] = useState(false);
+
+  const [
+    selectedWallet,
+    setSelectedWallet,
+  ] = useState(null);
+
+  const loadDashboard = useCallback(
+    async () => {
+      try {
+        setLoading(true);
+
+        const token =
+          await getAuthToken();
+
+        console.log(
+          'STORED TOKEN EXISTS:',
+          !!token
+        );
+
+        console.log(
+          'STORED TOKEN LENGTH:',
+          token
+            ? token.length
+            : 0
+        );
+
+        if (!token) {
+          await clearAuthentication();
+
+          navigation.replace(
+            'Login'
+          );
+
+          return;
+        }
+
+        const {
+          response: authResponse,
+          data: authData,
+        } = await authenticatedFetch(
+          '/auth/me'
+        );
+
+        console.log(
+          'AUTH ME STATUS:',
+          authResponse.status
+        );
+
+        console.log(
+          'AUTH ME RESPONSE:',
+          authData
+        );
+
+        if (
+          isUnauthorizedResponse(
+            authResponse
+          )
+        ) {
+          await handleUnauthorized(
+            navigation
+          );
+
+          return;
+        }
+
+        if (!authResponse.ok) {
+          throw new Error(
+            'Unable to validate authentication session'
+          );
+        }
+
+        if (
+          !authData.success ||
+          !authData.user
+        ) {
+          await clearAuthentication();
+
+          navigation.replace(
+            'Login'
+          );
+
+          return;
+        }
+
+        const {
+          response: statsResponse,
+          data: statsData,
+        } = await authenticatedFetch(
+          '/dashboard/stats'
+        );
+
+        if (
+          isUnauthorizedResponse(
+            statsResponse
+          )
+        ) {
+          await handleUnauthorized(
+            navigation
+          );
+
+          return;
+        }
+
+        if (statsResponse.ok) {
+          setStats(
+            statsData
+          );
+        }
+
+        const {
+          response: walletsResponse,
+          data: walletsData,
+        } = await authenticatedFetch(
+          '/wallets'
+        );
+
+        if (
+          isUnauthorizedResponse(
+            walletsResponse
+          )
+        ) {
+          await handleUnauthorized(
+            navigation
+          );
+
+          return;
+        }
+
+        if (walletsResponse.ok) {
+          setWallets(
+            walletsData.wallets ||
+              []
+          );
+        }
+      } catch (error) {
+        console.error(
+          'Dashboard loading error:',
+          error
+        );
+
+        if (
+          error.code ===
+          'AUTH_REQUIRED'
+        ) {
+          await clearAuthentication();
+
+          navigation.replace(
+            'Login'
+          );
+
+          return;
+        }
+
+        Alert.alert(
+          'Dashboard Error',
+          error.message ||
+            'Unable to load dashboard.'
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
     },
-    recent_activity: [],
-  });
-
-  const [wallets, setWallets] = useState([]);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [createModalVisible, setCreateModalVisible] = useState(false);
-  const [sendModalVisible, setSendModalVisible] = useState(false);
-  const [selectedWallet, setSelectedWallet] = useState(null);
-  const [token, setToken] = useState(null);
-
+    [navigation]
+  );
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [
+    loadDashboard,
+  ]);
 
+  const handleRefresh =
+    async () => {
+      setRefreshing(true);
+      await loadDashboard();
+    };
 
-  const loadDashboard = async () => {
-    try {
-      const authToken = await getAuthToken();
+  const handleWalletCreated =
+    () => {
+      loadDashboard();
+    };
 
-      if (!authToken) {
-        await clearAuthentication();
-        navigation.replace('Login');
-        return;
-      }
-
-      setToken(authToken);
-
-      // ------------------------------------------------------------
-      // Validate the mobile authentication token first.
-      // ------------------------------------------------------------
-
-      const authResponse = await fetch(
-        `${MOBILE_API_URL}/auth/me`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
+  const handleSend =
+    (wallet) => {
+      setSelectedWallet(
+        wallet
       );
 
-      if (authResponse.status === 401) {
-        await clearAuthentication();
-        Alert.alert(
-          'Session Expired',
-          'Please sign in again.'
+      setSendVisible(
+        true
+      );
+    };
+
+  const handleReceive =
+    (wallet) => {
+      setSelectedWallet(
+        wallet
+      );
+
+      setReceiveVisible(
+        true
+      );
+    };
+
+  const handleInspect =
+    (wallet) => {
+      setSelectedWallet(
+        wallet
+      );
+
+      setInspectionVisible(
+        true
+      );
+    };
+
+  const handleHistory =
+    (wallet) => {
+      setSelectedWallet(
+        wallet
+      );
+
+      setHistoryVisible(
+        true
+      );
+    };
+
+  const handleLogout =
+    async () => {
+      try {
+        await authenticatedFetch(
+          '/auth/logout',
+          {
+            method: 'POST',
+          }
         );
-        navigation.replace('Login');
-        return;
-      }
-
-      if (!authResponse.ok) {
-        throw new Error('Unable to validate authentication session');
-      }
-
-      const authData = await parseResponse(authResponse);
-
-      if (!authData.success || !authData.user) {
-        await clearAuthentication();
-        navigation.replace('Login');
-        return;
-      }
-
-      setUser(authData.user);
-
-      // ------------------------------------------------------------
-      // Fetch dashboard statistics from the mobile endpoint.
-      // ------------------------------------------------------------
-
-      const response = await fetch(
-        `${MOBILE_API_URL}/dashboard/stats`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await parseResponse(response);
-
-        if (data.success && data.data) {
-          setStats({
-            total_wallets: data.data.total_wallets ?? 0,
-            total_transactions: data.data.total_transactions ?? 0,
-            by_blockchain: data.data.by_blockchain || {
-              ethereum: { wallets: 0, transactions: 0 },
-              bitcoin: { wallets: 0, transactions: 0 },
-              tron: { wallets: 0, transactions: 0 },
-            },
-            recent_activity: data.data.recent_activity || [],
-          });
-        }
-      } else if (response.status === 401) {
-        await clearAuthentication();
-        Alert.alert(
-          'Session Expired',
-          'Please sign in again.'
+      } catch (error) {
+        console.warn(
+          'Logout request failed:',
+          error
         );
-        navigation.replace('Login');
-        return;
+      } finally {
+        await clearAuthentication();
+        onLogout();
       }
-
-      // ------------------------------------------------------------
-      // Fetch wallets list
-      // ------------------------------------------------------------
-
-      const walletsResponse = await fetch(
-        `${MOBILE_API_URL}/wallets`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (walletsResponse.ok) {
-        const data = await parseResponse(walletsResponse);
-        if (data.success) {
-          setWallets(data.wallets || []);
-        }
-      }
-
-    } catch (error) {
-      console.error('Dashboard loading error:', error);
-
-      setStats({
-        total_wallets: 0,
-        total_transactions: 0,
-        by_blockchain: {
-          ethereum: { wallets: 0, transactions: 0 },
-          bitcoin: { wallets: 0, transactions: 0 },
-          tron: { wallets: 0, transactions: 0 },
-        },
-        recent_activity: [],
-      });
-
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  const refreshDashboard = async () => {
-    setLoading(true);
-    await loadDashboard();
-    setLoading(false);
-  };
-
-
-  const handleLogout = async () => {
-    try {
-      const authToken = await getAuthToken();
-      if (authToken) {
-        try {
-          await fetch(
-            `${MOBILE_API_URL}/auth/logout`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-        } catch (e) {
-          // Ignore logout endpoint errors
-        }
-      }
-      await clearAuthentication();
-    } catch (error) {
-      console.error('Logout storage error:', error);
-    }
-
-    navigation.replace('Login');
-  };
-
-
-  const openSendModal = (wallet) => {
-    setSelectedWallet(wallet);
-    setSendModalVisible(true);
-  };
-
+    };
 
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View
+        style={
+          styles.loadingScreen
+        }
+      >
         <ActivityIndicator
           size="large"
-          color="#6c5ce7"
         />
+
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
+          Loading dashboard...
+        </Text>
       </View>
     );
   }
 
-
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.screen}>
 
       <View style={styles.dashboardHeader}>
 
         <View>
-          <Text style={styles.title}>
-            📊 Dashboard
+          <Text
+            style={
+              styles.dashboardGreeting
+            }
+          >
+            Welcome
           </Text>
 
-          {user?.username ? (
-            <Text style={styles.dashboardUser}>
-              Welcome, {user.username}
-            </Text>
-          ) : null}
+          <Text
+            style={
+              styles.dashboardUsername
+            }
+          >
+            {user?.username ||
+              'User'}
+          </Text>
         </View>
 
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            onPress={refreshDashboard}
-            style={styles.refreshButton}
+        <TouchableOpacity
+          onPress={handleLogout}
+        >
+          <Text
+            style={
+              styles.logoutText
+            }
           >
-            <Text style={styles.refreshButtonText}>🔄</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleLogout}
-          >
-            <Text style={styles.logoutLink}>🚪</Text>
-          </TouchableOpacity>
-        </View>
+            Logout
+          </Text>
+        </TouchableOpacity>
 
       </View>
 
+      <FlatList
+        data={wallets}
+        keyExtractor={(
+          item,
+          index
+        ) =>
+          item.wallet_id ||
+          item.id ||
+          `${index}`
+        }
+        refreshing={
+          refreshing
+        }
+        onRefresh={
+          handleRefresh
+        }
+        ListHeaderComponent={() => (
+          <View>
 
-      <ScrollView style={styles.container}>
+            <View
+              style={
+                styles.statsContainer
+              }
+            >
 
-        <View style={styles.statsGrid}>
+              <View
+                style={
+                  styles.statCard
+                }
+              >
+                <Text
+                  style={
+                    styles.statLabel
+                  }
+                >
+                  Wallets
+                </Text>
 
-          <View
-            style={[
-              styles.statCard,
-              {
-                borderColor: '#6c5ce7',
-              },
-            ]}
-          >
-            <Text style={styles.statValue}>
-              {stats.total_wallets}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              Total Wallets
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                borderColor: '#00b894',
-              },
-            ]}
-          >
-            <Text style={styles.statValue}>
-              {stats.total_transactions}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              Transactions
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                borderColor: '#6c5ce7',
-              },
-            ]}
-          >
-            <Text style={styles.statValue}>
-              {stats.by_blockchain?.ethereum?.wallets || 0}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              🟣 ETH Wallets
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                borderColor: '#f7931a',
-              },
-            ]}
-          >
-            <Text style={styles.statValue}>
-              {stats.by_blockchain?.bitcoin?.wallets || 0}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              🟠 BTC Wallets
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                borderColor: '#ef4444',
-              },
-            ]}
-          >
-            <Text style={styles.statValue}>
-              {stats.by_blockchain?.tron?.wallets || 0}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              🔴 TRX Wallets
-            </Text>
-          </View>
-
-        </View>
-
-        {/* Create Wallet Button */}
-        <TouchableOpacity
-          style={styles.createWalletButton}
-          onPress={() => setCreateModalVisible(true)}
-        >
-          <Text style={styles.createWalletButtonText}>➕ Create New Wallet</Text>
-        </TouchableOpacity>
-
-        {/* Wallet List */}
-        {wallets.length > 0 && (
-          <View style={styles.walletSection}>
-            <Text style={styles.sectionTitle}>My Wallets</Text>
-            {wallets.map((wallet) => {
-              const assetMap = {
-                'ethereum': 'ETH',
-                'bitcoin': 'BTC',
-                'tron': 'TRX',
-              };
-              const colorMap = {
-                'ethereum': '#6c5ce7',
-                'bitcoin': '#f7931a',
-                'tron': '#ef4444',
-              };
-              return (
-                <View key={wallet.id} style={styles.walletItem}>
-                  <View style={styles.walletInfo}>
-                    <Text style={styles.walletLabel}>
-                      {wallet.label || 'Unnamed Wallet'}
-                    </Text>
-                    <Text style={styles.walletAddress}>
-                      {wallet.address.slice(0, 16)}...
-                    </Text>
-                    <Text style={[styles.walletBlockchain, { color: colorMap[wallet.blockchain] || '#6a7a8e' }]}>
-                      {wallet.blockchain.toUpperCase()} • {wallet.network}
-                    </Text>
-                  </View>
-                  <View style={styles.walletActions}>
-                    <TouchableOpacity
-                      style={[styles.walletAction, styles.sendButton]}
-                      onPress={() => openSendModal(wallet)}
-                    >
-                      <Text style={styles.walletActionText}>📤 Send</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.walletAction}
-                      onPress={() => {
-                        Alert.alert(
-                          wallet.label || 'Wallet',
-                          `Address: ${wallet.address}\nBlockchain: ${wallet.blockchain}\nNetwork: ${wallet.network}\nAsset: ${assetMap[wallet.blockchain] || 'Unknown'}`
-                        );
-                      }}
-                    >
-                      <Text style={styles.walletActionText}>👁️</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Recent Activity Section */}
-        {stats.recent_activity && stats.recent_activity.length > 0 && (
-          <View style={styles.recentActivitySection}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-
-            {stats.recent_activity.slice(0, 5).map((item, index) => (
-              <View key={index} style={styles.activityItem}>
-                <View style={styles.activityIcon}>
-                  <Text>
-                    {item.type === 'wallet_inspection' ? '👛' : '📤'}
-                  </Text>
-                </View>
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityText}>
-                    {item.type === 'wallet_inspection'
-                      ? `Inspected ${item.blockchain} wallet`
-                      : `${item.blockchain} transaction ${item.amount ? `(${item.amount} ${item.asset})` : ''}`
-                    }
-                  </Text>
-                  <Text style={styles.activityAddress}>
-                    {item.address ? `${item.address.slice(0, 10)}...` : ''}
-                  </Text>
-                </View>
-                <Text style={styles.activityTime}>
-                  {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
+                <Text
+                  style={
+                    styles.statValue
+                  }
+                >
+                  {stats?.wallet_count ??
+                    wallets.length}
                 </Text>
               </View>
-            ))}
+
+              <View
+                style={
+                  styles.statCard
+                }
+              >
+                <Text
+                  style={
+                    styles.statLabel
+                  }
+                >
+                  Transactions
+                </Text>
+
+                <Text
+                  style={
+                    styles.statValue
+                  }
+                >
+                  {stats?.transaction_count ??
+                    0}
+                </Text>
+              </View>
+
+            </View>
+
+            <TouchableOpacity
+              style={
+                styles.createWalletButton
+              }
+              onPress={() =>
+                setCreateWalletVisible(
+                  true
+                )
+              }
+            >
+              <Text
+                style={
+                  styles.primaryButtonText
+                }
+              >
+                + Create Wallet
+              </Text>
+            </TouchableOpacity>
+
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
+              Your Wallets
+            </Text>
+
           </View>
         )}
+        renderItem={({
+          item,
+        }) => (
+          <View>
 
-      </ScrollView>
+            <WalletCard
+              wallet={item}
+              onSend={
+                handleSend
+              }
+              onReceive={
+                handleReceive
+              }
+              onInspect={
+                handleInspect
+              }
+            />
 
-      {/* Create Wallet Modal */}
+            <TouchableOpacity
+              style={
+                styles.historyButton
+              }
+              onPress={() =>
+                handleHistory(item)
+              }
+            >
+              <Text
+                style={
+                  styles.historyButtonText
+                }
+              >
+                View Transaction History
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+        )}
+        ListEmptyComponent={() => (
+          <View
+            style={
+              styles.emptyContainer
+            }
+          >
+            <Text
+              style={
+                styles.emptyText
+              }
+            >
+              You don't have any wallets yet.
+            </Text>
+
+            <Text
+              style={
+                styles.emptySubtext
+              }
+            >
+              Create your first wallet to get started.
+            </Text>
+          </View>
+        )}
+      />
+
       <CreateWalletModal
-        visible={createModalVisible}
-        onClose={() => setCreateModalVisible(false)}
-        onSuccess={refreshDashboard}
-        token={token}
+        visible={
+          createWalletVisible
+        }
+        onClose={() =>
+          setCreateWalletVisible(
+            false
+          )
+        }
+        onCreated={
+          handleWalletCreated
+        }
       />
 
-      {/* Send Transaction Modal */}
       <SendTransactionModal
-        visible={sendModalVisible}
-        onClose={() => {
-          setSendModalVisible(false);
-          setSelectedWallet(null);
-        }}
-        onSuccess={refreshDashboard}
-        wallet={selectedWallet}
-        token={token}
+        visible={
+          sendVisible
+        }
+        wallet={
+          selectedWallet
+        }
+        onClose={() =>
+          setSendVisible(
+            false
+          )
+        }
+        onSent={
+          handleWalletCreated
+        }
       />
 
-    </SafeAreaView>
+      <ReceiveWalletModal
+        visible={
+          receiveVisible
+        }
+        wallet={
+          selectedWallet
+        }
+        onClose={() =>
+          setReceiveVisible(
+            false
+          )
+        }
+      />
+
+      <WalletInspectionModal
+        visible={
+          inspectionVisible
+        }
+        wallet={
+          selectedWallet
+        }
+        onClose={() =>
+          setInspectionVisible(
+            false
+          )
+        }
+      />
+
+      <TransactionHistoryModal
+        visible={
+          historyVisible
+        }
+        wallet={
+          selectedWallet
+        }
+        onClose={() =>
+          setHistoryVisible(
+            false
+          )
+        }
+      />
+
+    </View>
   );
 };
-
-
 // ============================================================================
-// App Navigation
+// Main Application
 // ============================================================================
 
 const App = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(null);
-  const [currentScreen, setCurrentScreen] = useState('Login');
+  const [
+    screen,
+    setScreen,
+  ] = useState('loading');
 
+  const [
+    user,
+    setUser,
+  ] = useState(null);
+
+  const [
+    token,
+    setToken,
+  ] = useState(null);
+
+  // --------------------------------------------------------------------------
+  // Restore authentication state
+  // --------------------------------------------------------------------------
 
   useEffect(() => {
-    checkLogin();
+    let mounted = true;
+
+    const restoreAuthentication =
+      async () => {
+        try {
+          const storedToken =
+            await getAuthToken();
+
+          const storedUser =
+            await getStoredUser();
+
+          console.log(
+            'RESTORE TOKEN EXISTS:',
+            !!storedToken
+          );
+
+          console.log(
+            'RESTORE TOKEN LENGTH:',
+            storedToken
+              ? storedToken.length
+              : 0
+          );
+
+          if (!storedToken) {
+            if (mounted) {
+              setScreen('login');
+            }
+
+            return;
+          }
+
+          // ------------------------------------------------------------------
+          // Validate the stored token with the backend before restoring the
+          // authenticated application state.
+          // ------------------------------------------------------------------
+
+          const response =
+            await fetch(
+              `${MOBILE_API_URL}/auth/me`,
+              {
+                method: 'GET',
+                headers: {
+                  'Authorization':
+                    `Bearer ${storedToken}`,
+                  'Content-Type':
+                    'application/json',
+                },
+              }
+            );
+
+          const data =
+            await parseResponse(
+              response
+            );
+
+          console.log(
+            'RESTORE AUTH STATUS:',
+            response.status
+          );
+
+          console.log(
+            'RESTORE AUTH RESPONSE:',
+            data
+          );
+
+          if (
+            response.status === 401
+          ) {
+            await clearAuthentication();
+
+            if (mounted) {
+              setUser(null);
+              setToken(null);
+              setScreen('login');
+            }
+
+            return;
+          }
+
+          if (
+            !response.ok ||
+            !data.success ||
+            !data.user
+          ) {
+            await clearAuthentication();
+
+            if (mounted) {
+              setUser(null);
+              setToken(null);
+              setScreen('login');
+            }
+
+            return;
+          }
+
+          if (mounted) {
+            setToken(
+              storedToken
+            );
+
+            setUser(
+              data.user ||
+                storedUser
+            );
+
+            setScreen(
+              'dashboard'
+            );
+          }
+        } catch (error) {
+          console.error(
+            'Authentication restore error:',
+            error
+          );
+
+          /*
+           * Do not keep a broken/stale authentication state.
+           * If the API cannot validate the session, return to login.
+           */
+          await clearAuthentication();
+
+          if (mounted) {
+            setUser(null);
+            setToken(null);
+            setScreen('login');
+          }
+        }
+      };
+
+    restoreAuthentication();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
+  // --------------------------------------------------------------------------
+  // Login
+  // --------------------------------------------------------------------------
 
-  const checkLogin = async () => {
-    try {
-      const token = await getAuthToken();
+  const handleLogin = (
+    authenticatedToken,
+    authenticatedUser
+  ) => {
+    setToken(
+      authenticatedToken
+    );
 
-      if (!token) {
-        await clearAuthentication();
+    setUser(
+      authenticatedUser
+    );
 
-        setIsLoggedIn(false);
-        setCurrentScreen('Login');
-        return;
-      }
-
-
-      // ------------------------------------------------------------
-      // Verify that the stored token is still valid.
-      // ------------------------------------------------------------
-
-      const response = await fetch(
-        `${MOBILE_API_URL}/auth/me`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-
-      if (!response.ok) {
-        await clearAuthentication();
-
-        setIsLoggedIn(false);
-        setCurrentScreen('Login');
-        return;
-      }
-
-
-      const data = await parseResponse(response);
-
-
-      if (
-        !data.success ||
-        !data.user
-      ) {
-        await clearAuthentication();
-
-        setIsLoggedIn(false);
-        setCurrentScreen('Login');
-        return;
-      }
-
-
-      // Refresh stored user information.
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.USER,
-        JSON.stringify(data.user)
-      );
-
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.IS_LOGGED_IN,
-        'true'
-      );
-
-
-      setIsLoggedIn(true);
-      setCurrentScreen('Dashboard');
-
-    } catch (error) {
-      console.error(
-        'Authentication check error:',
-        error
-      );
-
-      // If the server cannot be reached, do not assume
-      // the user is logged out permanently.
-      //
-      // For startup, however, we need a deterministic screen.
-      // The user can sign in again if necessary.
-      setIsLoggedIn(false);
-      setCurrentScreen('Login');
-    }
+    setScreen(
+      'dashboard'
+    );
   };
 
+  // --------------------------------------------------------------------------
+  // Logout
+  // --------------------------------------------------------------------------
 
-  if (isLoggedIn === null) {
+  const handleLogout = async () => {
+    await clearAuthentication();
+
+    setToken(null);
+    setUser(null);
+
+    setScreen('login');
+  };
+
+  // --------------------------------------------------------------------------
+  // Registration
+  // --------------------------------------------------------------------------
+
+  const handleRegistrationSuccess =
+    () => {
+      setScreen('login');
+    };
+
+  // --------------------------------------------------------------------------
+  // Navigation
+  // --------------------------------------------------------------------------
+
+  if (screen === 'loading') {
     return (
-      <View style={styles.center}>
+      <View
+        style={
+          styles.loadingScreen
+        }
+      >
+        <Text
+          style={
+            styles.logo
+          }
+        >
+          UBP
+        </Text>
+
         <ActivityIndicator
           size="large"
-          color="#6c5ce7"
         />
+
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
+          Initializing UBP...
+        </Text>
       </View>
     );
   }
 
+  if (screen === 'login') {
+    return (
+      <LoginScreen
+        onLogin={
+          handleLogin
+        }
+        onNavigateRegister={() =>
+          setScreen(
+            'register'
+          )
+        }
+      />
+    );
+  }
 
-  const renderScreen = () => {
-    switch (currentScreen) {
+  if (screen === 'register') {
+    return (
+      <RegisterScreen
+        onRegisterSuccess={
+          handleRegistrationSuccess
+        }
+        onNavigateLogin={() =>
+          setScreen(
+            'login'
+          )
+        }
+      />
+    );
+  }
 
-      case 'Login':
-        return (
-          <LoginScreen
-            navigation={{
-              navigate: setCurrentScreen,
-              replace: setCurrentScreen,
-            }}
-          />
-        );
+  if (screen === 'dashboard') {
+    return (
+      <DashboardScreen
+        navigation={{
+          replace: (
+            destination
+          ) => {
+            if (
+              destination ===
+              'Login'
+            ) {
+              handleLogout();
+            }
+          },
+        }}
+        user={user}
+        token={token}
+        onLogout={
+          handleLogout
+        }
+      />
+    );
+  }
 
-
-      case 'Register':
-        return (
-          <RegisterScreen
-            navigation={{
-              navigate: setCurrentScreen,
-              replace: setCurrentScreen,
-            }}
-          />
-        );
-
-
-      case 'Dashboard':
-        return (
-          <DashboardScreen
-            navigation={{
-              navigate: setCurrentScreen,
-              replace: setCurrentScreen,
-            }}
-          />
-        );
-
-
-      default:
-        return (
-          <LoginScreen
-            navigation={{
-              navigate: setCurrentScreen,
-              replace: setCurrentScreen,
-            }}
-          />
-        );
-    }
-  };
-
+  // --------------------------------------------------------------------------
+  // Defensive fallback
+  // --------------------------------------------------------------------------
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View
+      style={
+        styles.loadingScreen
+      }
+    >
+      <Text
+        style={
+          styles.errorText
+        }
+      >
+        Unable to initialize application.
+      </Text>
 
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="#0a0e17"
-      />
-
-      {renderScreen()}
-
-    </SafeAreaView>
+      <TouchableOpacity
+        style={
+          styles.primaryButton
+        }
+        onPress={() =>
+          setScreen('login')
+        }
+      >
+        <Text
+          style={
+            styles.primaryButtonText
+          }
+        >
+          Return to Login
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
 };
-
 
 // ============================================================================
 // Styles
@@ -1324,395 +2845,600 @@ const App = () => {
 
 const styles = StyleSheet.create({
 
-  safe: {
+  // --------------------------------------------------------------------------
+  // General
+  // --------------------------------------------------------------------------
+
+  screen: {
     flex: 1,
-    backgroundColor: '#0a0e17',
+    backgroundColor: '#f5f7fa',
   },
 
-  container: {
+  loadingScreen: {
     flex: 1,
-    backgroundColor: '#0a0e17',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f7fa',
     padding: 20,
   },
 
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0a0e17',
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: '#555',
+  },
+
+  logo: {
+    fontSize: 42,
+    fontWeight: '800',
+    letterSpacing: 3,
+    marginBottom: 8,
+    color: '#1f2937',
   },
 
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#e0e6ed',
+    fontSize: 24,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 4,
+    color: '#1f2937',
+    marginBottom: 8,
   },
 
   subtitle: {
-    color: '#6a7a8e',
+    fontSize: 15,
     textAlign: 'center',
-    marginBottom: 30,
-    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 24,
   },
 
-  form: {
-    gap: 12,
+  // --------------------------------------------------------------------------
+  // Authentication
+  // --------------------------------------------------------------------------
+
+  authContainer: {
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 70,
   },
 
   input: {
-    backgroundColor: '#141b2b',
-    padding: 14,
-    borderRadius: 10,
-    color: '#e0e6ed',
-    fontSize: 16,
+    width: '100%',
+    minHeight: 50,
     borderWidth: 1,
-    borderColor: '#1e2a3e',
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    paddingHorizontal: 15,
+    fontSize: 15,
+    color: '#111827',
+    marginBottom: 14,
   },
 
-  button: {
-    backgroundColor: '#6c5ce7',
-    padding: 16,
+  primaryButton: {
+    minHeight: 50,
     borderRadius: 10,
     alignItems: 'center',
-    marginTop: 4,
+    justifyContent: 'center',
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 20,
+    marginTop: 8,
   },
 
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 
-  link: {
-    color: '#6c5ce7',
-    textAlign: 'center',
-    marginTop: 12,
-    fontSize: 14,
+  secondaryButton: {
+    minHeight: 50,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#2563eb',
+    paddingHorizontal: 20,
+    marginTop: 10,
   },
+
+  secondaryButtonText: {
+    color: '#2563eb',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // --------------------------------------------------------------------------
+  // Dashboard
+  // --------------------------------------------------------------------------
 
   dashboardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingTop: 50,
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 10,
-  },
-
-  headerActions: {
+    paddingBottom: 18,
+    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
 
-  refreshButton: {
-    padding: 4,
+  dashboardGreeting: {
+    fontSize: 14,
+    color: '#6b7280',
   },
 
-  refreshButtonText: {
-    fontSize: 20,
-  },
-
-  dashboardUser: {
-    color: '#8a9aae',
-    fontSize: 13,
+  dashboardUsername: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
     marginTop: 2,
   },
 
-  logoutLink: {
-    fontSize: 24,
-    color: '#ef4444',
+  logoutText: {
+    color: '#dc2626',
+    fontSize: 15,
+    fontWeight: '600',
   },
 
-  statsGrid: {
+  statsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 12,
   },
 
   statCard: {
     flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#141b2b',
-    padding: 16,
+    backgroundColor: '#fff',
     borderRadius: 12,
+    padding: 16,
     borderWidth: 1,
-    alignItems: 'center',
-  },
-
-  statValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#e0e6ed',
+    borderColor: '#e5e7eb',
   },
 
   statLabel: {
-    color: '#8a9aae',
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 5,
+  },
+
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
   },
 
   createWalletButton: {
-    backgroundColor: '#6c5ce7',
-    padding: 16,
-    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
+    minHeight: 50,
+    borderRadius: 10,
     alignItems: 'center',
-    marginBottom: 16,
-  },
-
-  createWalletButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  walletSection: {
-    marginBottom: 16,
+    justifyContent: 'center',
+    backgroundColor: '#2563eb',
   },
 
   sectionTitle: {
-    color: '#e0e6ed',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    paddingHorizontal: 16,
+    marginTop: 22,
+    marginBottom: 10,
   },
 
-  walletItem: {
+  // --------------------------------------------------------------------------
+  // Wallet
+  // --------------------------------------------------------------------------
+
+  walletCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+
+  walletHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#141b2b',
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#1e2a3e',
-    marginBottom: 8,
+    alignItems: 'flex-start',
   },
 
-  walletInfo: {
+  walletHeaderLeft: {
     flex: 1,
+    paddingRight: 10,
   },
 
   walletLabel: {
-    color: '#e0e6ed',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-
-  walletAddress: {
-    color: '#6a7a8e',
-    fontSize: 12,
-    fontFamily: 'monospace',
-    marginTop: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
   },
 
   walletBlockchain: {
-    fontSize: 11,
-    marginTop: 1,
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+
+  walletBalance: {
+    fontSize: 25,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 18,
+  },
+
+  walletAddress: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#2563eb',
   },
 
   walletActions: {
     flexDirection: 'row',
-    gap: 8,
+    marginTop: 16,
+    gap: 10,
   },
 
-  walletAction: {
-    padding: 6,
-  },
-
-  sendButton: {
-    backgroundColor: '#6c5ce7',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  walletActionButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
   },
 
   walletActionText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#e0e6ed',
+    fontWeight: '700',
+    color: '#2563eb',
   },
 
-  recentActivitySection: {
-    marginTop: 4,
-    backgroundColor: '#141b2b',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#1e2a3e',
-    marginBottom: 16,
+  inspectButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
   },
 
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1f2e',
+  inspectButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
   },
 
-  activityIcon: {
-    width: 30,
+  historyButton: {
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 4,
+    paddingVertical: 10,
     alignItems: 'center',
   },
 
-  activityContent: {
-    flex: 1,
-    marginLeft: 8,
-  },
-
-  activityText: {
-    color: '#e0e6ed',
+  historyButtonText: {
+    color: '#2563eb',
     fontSize: 13,
+    fontWeight: '600',
   },
 
-  activityAddress: {
-    color: '#6a7a8e',
-    fontSize: 11,
-    marginTop: 1,
-  },
+  // --------------------------------------------------------------------------
+  // Modals
+  // --------------------------------------------------------------------------
 
-  activityTime: {
-    color: '#4a5a6e',
-    fontSize: 10,
-    marginLeft: 8,
-  },
-
-  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'flex-end',
   },
 
-  modalContent: {
-    backgroundColor: '#141b2b',
-    borderRadius: 16,
-    width: '90%',
-    maxWidth: 400,
-    borderWidth: 1,
-    borderColor: '#1e2a3e',
-    overflow: 'hidden',
+  modalContainer: {
+    width: '100%',
+    maxHeight: '90%',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 22,
+  },
+
+  largeModalContainer: {
+    width: '100%',
+    height: '90%',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
   },
 
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1e2a3e',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
 
   modalTitle: {
-    color: '#e0e6ed',
-    fontSize: 18,
+    fontSize: 21,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 18,
+  },
+
+  closeButton: {
+    fontSize: 22,
+    color: '#6b7280',
+    padding: 5,
+  },
+
+  fieldLabel: {
+    fontSize: 13,
     fontWeight: '600',
+    color: '#374151',
+    marginBottom: 6,
   },
 
-  modalClose: {
-    padding: 4,
-  },
-
-  modalCloseText: {
-    color: '#6a7a8e',
-    fontSize: 20,
-  },
-
-  modalBody: {
-    padding: 16,
-  },
-
-  modalLabel: {
-    color: '#8a9aae',
-    fontSize: 14,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-
-  modalInput: {
-    backgroundColor: '#0d1422',
-    padding: 12,
-    borderRadius: 8,
-    color: '#e0e6ed',
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: '#1e2a3e',
-    marginBottom: 16,
-  },
-
-  blockchainOptions: {
+  blockchainRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     marginBottom: 16,
   },
 
-  blockchainOption: {
+  blockchainButton: {
     flex: 1,
-    padding: 10,
-    borderRadius: 8,
+    minHeight: 44,
+    borderRadius: 9,
     borderWidth: 1,
-    borderColor: '#1e2a3e',
+    borderColor: '#d1d5db',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
   },
 
-  blockchainOptionText: {
-    color: '#e0e6ed',
+  blockchainButtonActive: {
+    borderColor: '#2563eb',
+    backgroundColor: '#eff6ff',
+  },
+
+  blockchainButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+
+  blockchainButtonTextActive: {
+    color: '#2563eb',
+  },
+
+  selectedWalletBox: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    padding: 13,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+
+  selectedWalletLabel: {
     fontSize: 12,
-    fontWeight: '500',
+    color: '#6b7280',
+    marginBottom: 3,
   },
 
-  modalButton: {
-    backgroundColor: '#6c5ce7',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
+  selectedWalletValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  addressText: {
+    fontSize: 12,
+    color: '#6b7280',
     marginTop: 4,
   },
 
-  modalButtonDisabled: {
-    opacity: 0.6,
-  },
-
-  modalButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  // Send Transaction specific
-  sendFromInfo: {
-    backgroundColor: '#0d1422',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#1e2a3e',
-  },
-
-  sendFromLabel: {
-    color: '#6a7a8e',
-    fontSize: 12,
-  },
-
-  sendFromAddress: {
-    color: '#e0e6ed',
+  receiveDescription: {
     fontSize: 14,
-    fontFamily: 'monospace',
+    color: '#6b7280',
+    marginBottom: 16,
+  },
+
+  receiveAddressBox: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+
+  receiveAddress: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#111827',
+  },
+
+  // --------------------------------------------------------------------------
+  // Inspection
+  // --------------------------------------------------------------------------
+
+  inspectionSection: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+
+  infoLabel: {
+    flex: 0.4,
+    fontSize: 13,
+    color: '#6b7280',
+  },
+
+  infoValue: {
+    flex: 0.6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+    textAlign: 'right',
+  },
+
+  tokenRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+
+  tokenInfo: {
+    flex: 1,
+  },
+
+  tokenName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  tokenSymbol: {
+    fontSize: 12,
+    color: '#6b7280',
     marginTop: 2,
   },
 
-  sendFromBlockchain: {
-    color: '#6c5ce7',
-    fontSize: 12,
-    marginTop: 2,
+  tokenBalance: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  // --------------------------------------------------------------------------
+  // Transactions
+  // --------------------------------------------------------------------------
+
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+
+  transactionMain: {
+    flex: 1,
+    paddingRight: 10,
+  },
+
+  transactionHash: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
+
+  transactionMeta: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+
+  transactionRight: {
+    alignItems: 'flex-end',
+  },
+
+  transactionAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  transactionStatus: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 4,
+    textTransform: 'capitalize',
+  },
+
+  statusConfirmed: {
+    color: '#16a34a',
+  },
+
+  statusFailed: {
+    color: '#dc2626',
+  },
+
+  // --------------------------------------------------------------------------
+  // States
+  // --------------------------------------------------------------------------
+
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+
+  errorText: {
+    fontSize: 14,
+    color: '#dc2626',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+
+  emptyContainer: {
+    padding: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  emptyText: {
+    fontSize: 15,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+
+  emptySubtext: {
+    fontSize: 13,
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginTop: 6,
   },
 
 });
 
+// ============================================================================
+// Export
+// ============================================================================
 
 export default App;
