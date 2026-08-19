@@ -52,6 +52,50 @@ mobile_bp = Blueprint(
 
 MOBILE_TOKEN_MAX_AGE = 60 * 60 * 24
 
+# Supported mobile wallet networks. Keep this list aligned with the
+# wallet service capabilities rather than accepting arbitrary blockchain names.
+SUPPORTED_BLOCKCHAINS = frozenset({"ethereum", "bitcoin", "tron"})
+
+# Transaction-history pagination limits. The API keeps the existing default
+# while preventing pathological requests from the mobile client.
+DEFAULT_PAGE_LIMIT = 20
+MAX_PAGE_LIMIT = 100
+
+
+def _error_response(message: str, status_code: int):
+    """Return the standard mobile API error response."""
+    return jsonify({"success": False, "error": message}), status_code
+
+
+def _get_wallet_service():
+    """Create the wallet service lazily to preserve the HTTP-adapter boundary."""
+    from services.wallet_service import WalletService
+
+    return WalletService()
+
+
+def _get_owned_wallet(wallet_service, user_id, wallet_id):
+    """Return a wallet owned by ``user_id`` or ``None`` if inaccessible."""
+    wallets = wallet_service.get_user_wallets(user_id)
+    return next(
+        (wallet for wallet in wallets if wallet.get("wallet_id") == wallet_id),
+        None,
+    )
+
+
+def _parse_pagination():
+    """Parse and validate transaction-history pagination parameters."""
+    limit = request.args.get("limit", DEFAULT_PAGE_LIMIT, type=int)
+    offset = request.args.get("offset", 0, type=int)
+
+    if limit is None or limit < 1 or limit > MAX_PAGE_LIMIT:
+        return None, None, "Limit must be between 1 and 100"
+
+    if offset is None or offset < 0:
+        return None, None, "Offset must be 0 or greater"
+
+    return limit, offset, None
+
 
 def _token_serializer() -> URLSafeTimedSerializer:
     """
@@ -486,11 +530,8 @@ def mobile_dashboard_stats():
     try:
         user = request.mobile_user
 
-        from services.wallet_service import WalletService
         from database.database import get_db_manager
         from database.models import Wallet, UserTransaction, WalletInspection
-
-        wallet_service = WalletService()
 
         # Get all user wallets from the database
         db = get_db_manager()
@@ -654,7 +695,7 @@ def mobile_create_wallet():
                 }
             ), 400
 
-        if blockchain not in ["ethereum", "bitcoin", "tron"]:
+        if blockchain not in SUPPORTED_BLOCKCHAINS:
             return jsonify(
                 {
                     "success": False,
@@ -665,9 +706,7 @@ def mobile_create_wallet():
         if not label:
             label = f"{blockchain.capitalize()} Wallet"
 
-        from services.wallet_service import WalletService
-
-        wallet_service = WalletService()
+        wallet_service = _get_wallet_service()
         wallet = wallet_service.create_wallet(
             user_id=user.id,
             blockchain=blockchain,
@@ -735,9 +774,7 @@ def mobile_list_wallets():
     try:
         user = request.mobile_user
 
-        from services.wallet_service import WalletService
-
-        wallet_service = WalletService()
+        wallet_service = _get_wallet_service()
         wallets = wallet_service.get_user_wallets(user.id)
 
         return jsonify(
@@ -780,21 +817,13 @@ def mobile_get_wallet_balance(wallet_id: str):
     try:
         user = request.mobile_user
 
-        from services.wallet_service import WalletService
+        wallet_service = _get_wallet_service()
 
-        wallet_service = WalletService()
-
-        # Verify wallet belongs to user
-        wallets = wallet_service.get_user_wallets(user.id)
-        wallet = next((w for w in wallets if w.get("wallet_id") == wallet_id), None)
+        # Verify wallet belongs to the authenticated user.
+        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
 
         if not wallet:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Wallet not found or access denied",
-                }
-            ), 404
+            return _error_response("Wallet not found or access denied", 404)
 
         balance = wallet_service.get_wallet_balance(wallet_id)
 
@@ -816,6 +845,94 @@ def mobile_get_wallet_balance(wallet_id: str):
     except Exception as exc:
         current_app.logger.error(
             "Mobile get balance error: %s",
+            exc,
+        )
+        return jsonify(
+            {
+                "success": False,
+                "error": str(exc),
+            }
+        ), 500
+
+
+# =============================================================================
+# Wallet Inspection
+# =============================================================================
+
+@mobile_bp.get("/wallets/<wallet_id>/inspect")
+@mobile_auth_required
+def mobile_inspect_wallet(wallet_id: str):
+    """
+    Inspect a wallet with detailed information including token holdings.
+
+    Returns:
+        {
+            "success": True,
+            "wallet": {
+                "wallet_id": "eth_123abc",
+                "address": "0x...",
+                "blockchain": "ethereum",
+                "network": "mainnet",
+                "label": "My ETH Wallet",
+                "balance": 1.5,
+                "asset": "ETH",
+                "nonce": 0,
+                "transaction_count": 0,
+                "is_contract": false,
+                "classification": "EOA",
+                "token_balances": [
+                    {
+                        "contract_address": "0x...",
+                        "name": "USDC",
+                        "symbol": "USDC",
+                        "balance": 100.0,
+                        "decimals": 6
+                    }
+                ],
+                "last_updated": "2026-01-01T00:00:00"
+            }
+        }
+    """
+    try:
+        user = request.mobile_user
+        wallet_service = _get_wallet_service()
+
+        # Verify wallet belongs to the authenticated user.
+        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
+
+        if not wallet:
+            return _error_response("Wallet not found or access denied", 404)
+
+        # Get detailed wallet report
+        report = wallet_service.get_wallet_report(wallet_id)
+
+        if "error" in report:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": report["error"],
+                }
+            ), 400
+
+        # Add wallet metadata
+        report.update({
+            "wallet_id": wallet.get("wallet_id"),
+            "label": wallet.get("label"),
+            "blockchain": wallet.get("blockchain"),
+            "network": wallet.get("network", "mainnet"),
+            "created_at": wallet.get("created_at"),
+        })
+
+        return jsonify(
+            {
+                "success": True,
+                "wallet": report,
+            }
+        ), 200
+
+    except Exception as exc:
+        current_app.logger.error(
+            "Mobile inspect wallet error: %s",
             exc,
         )
         return jsonify(
@@ -897,21 +1014,13 @@ def mobile_send_transaction(wallet_id: str):
                 }
             ), 400
 
-        from services.wallet_service import WalletService
+        wallet_service = _get_wallet_service()
 
-        wallet_service = WalletService()
-
-        # Verify wallet belongs to user
-        wallets = wallet_service.get_user_wallets(user.id)
-        wallet = next((w for w in wallets if w.get("wallet_id") == wallet_id), None)
+        # Verify wallet belongs to the authenticated user.
+        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
 
         if not wallet:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Wallet not found or access denied",
-                }
-            ), 404
+            return _error_response("Wallet not found or access denied", 404)
 
         # Send the transaction
         result = wallet_service.send_transaction(
@@ -946,6 +1055,152 @@ def mobile_send_transaction(wallet_id: str):
     except Exception as exc:
         current_app.logger.error(
             "Mobile send transaction error: %s",
+            exc,
+        )
+        return jsonify(
+            {
+                "success": False,
+                "error": str(exc),
+            }
+        ), 500
+
+
+# =============================================================================
+# Transaction History
+# =============================================================================
+
+@mobile_bp.get("/wallets/<wallet_id>/transactions")
+@mobile_auth_required
+def mobile_get_transactions(wallet_id: str):
+    """
+    Get transaction history for a wallet.
+
+    Query Parameters:
+        limit: int (default: 20)
+        offset: int (default: 0)
+
+    Returns:
+        {
+            "success": True,
+            "transactions": [...],
+            "total": 0,
+            "limit": 20,
+            "offset": 0,
+            "total_pages": 1
+        }
+    """
+    try:
+        user = request.mobile_user
+        limit, offset, pagination_error = _parse_pagination()
+
+        if pagination_error:
+            return _error_response(pagination_error, 400)
+
+        wallet_service = _get_wallet_service()
+
+        # Verify wallet belongs to the authenticated user.
+        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
+
+        if not wallet:
+            return _error_response("Wallet not found or access denied", 404)
+
+        result = wallet_service.get_transaction_history(wallet_id, limit, offset)
+
+        if "error" in result:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": result["error"],
+                }
+            ), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "transactions": result.get("transactions", []),
+                "total": result.get("total", 0),
+                "limit": result.get("limit", limit),
+                "offset": result.get("offset", offset),
+                "total_pages": result.get("total_pages", 1),
+            }
+        ), 200
+
+    except Exception as exc:
+        current_app.logger.error(
+            "Mobile get transactions error: %s",
+            exc,
+        )
+        return jsonify(
+            {
+                "success": False,
+                "error": str(exc),
+            }
+        ), 500
+
+
+# =============================================================================
+# Token Holdings
+# =============================================================================
+
+@mobile_bp.get("/wallets/<wallet_id>/tokens")
+@mobile_auth_required
+def mobile_get_tokens(wallet_id: str):
+    """
+    Get token holdings for a wallet.
+
+    Returns:
+        {
+            "success": True,
+            "tokens": [
+                {
+                    "contract_address": "0x...",
+                    "name": "USDC",
+                    "symbol": "USDC",
+                    "decimals": 6,
+                    "balance": 100.0,
+                    "balance_formatted": 100.0,
+                    "logo_url": "..."
+                }
+            ],
+            "blockchain": "ethereum",
+            "address": "0x...",
+            "total_tokens": 1
+        }
+    """
+    try:
+        user = request.mobile_user
+
+        wallet_service = _get_wallet_service()
+
+        # Verify wallet belongs to the authenticated user.
+        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
+
+        if not wallet:
+            return _error_response("Wallet not found or access denied", 404)
+
+        result = wallet_service.get_token_holdings(wallet_id)
+
+        if "error" in result:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": result["error"],
+                }
+            ), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tokens": result.get("tokens", []),
+                "blockchain": result.get("blockchain"),
+                "address": result.get("address"),
+                "total_tokens": result.get("total_tokens", 0),
+            }
+        ), 200
+
+    except Exception as exc:
+        current_app.logger.error(
+            "Mobile get tokens error: %s",
             exc,
         )
         return jsonify(
