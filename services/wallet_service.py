@@ -31,6 +31,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 from database.database import get_db_manager
 from database.models import User, Wallet, UserTransaction
@@ -382,6 +383,320 @@ class WalletService:
             logger.error(f"Error getting balance: {e}")
             return {"error": str(e)}
 
+    def get_wallet_report(self, wallet_id: str) -> Dict[str, Any]:
+        """
+        Get detailed wallet report including token holdings.
+
+        Parameters
+        ----------
+        wallet_id : str
+            UBP wallet identifier.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Wallet report with balance, token holdings, and metadata.
+        """
+        try:
+            # Get wallet from database
+            wallet_info = self.get_wallet_by_id(wallet_id)
+            if not wallet_info:
+                return {"error": "Wallet not found"}
+
+            blockchain = wallet_info.get("blockchain", "ethereum")
+            address = wallet_info.get("address")
+
+            # Start with basic wallet info
+            result = {
+                "address": address,
+                "blockchain": blockchain,
+                "network": wallet_info.get("network", "mainnet"),
+                "label": wallet_info.get("label"),
+                "wallet_id": wallet_id,
+                "token_balances": [],
+            }
+
+            # Get balance
+            balance = self.get_wallet_balance(wallet_id)
+            if "error" not in balance:
+                result.update({
+                    "balance": balance.get("balance", 0),
+                    "asset": balance.get("symbol", "ETH"),
+                    "decimals": balance.get("decimals", 18),
+                })
+
+            # Get additional blockchain-specific info
+            if blockchain == "ethereum" and self.eth_provider:
+                try:
+                    w3 = self.eth_provider.web3
+                    result["nonce"] = w3.eth.get_transaction_count(address)
+                    code = w3.eth.get_code(address)
+                    result["is_contract"] = len(code) > 0
+                    result["classification"] = "Contract" if result["is_contract"] else "EOA"
+                    result["transaction_count"] = result.get("nonce", 0)
+                except Exception as e:
+                    logger.warning(f"Could not fetch Ethereum details: {e}")
+
+            elif blockchain == "bitcoin":
+                try:
+                    import requests
+                    response = requests.get(
+                        f"https://blockchain.info/q/addressbalance/{address}",
+                        timeout=10
+                    )
+                    if response.status_code == 200:
+                        balance_satoshis = int(response.text)
+                        result["transaction_count"] = 0
+                    result["is_contract"] = False
+                    result["classification"] = "Bitcoin Address"
+                    result["nonce"] = 0
+                except Exception as e:
+                    logger.warning(f"Could not fetch Bitcoin details: {e}")
+
+            elif blockchain == "tron" and self.tron_provider:
+                try:
+                    account = self.tron_provider.get_account(address)
+                    result["energy"] = account.get("energy", 0)
+                    result["bandwidth"] = account.get("bandwidth", 0)
+                    result["is_contract"] = False
+                    result["classification"] = "EOA"
+                    result["nonce"] = 0
+                    result["transaction_count"] = 0
+                except Exception as e:
+                    logger.warning(f"Could not fetch TRON details: {e}")
+
+            # For token balances - would need to query token contracts
+            # This is a placeholder for future implementation
+            result["token_balances"] = []
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error getting wallet report: {e}")
+            return {"error": str(e)}
+
+    def get_transaction_history(
+        self, 
+        wallet_id: str, 
+        limit: int = 20, 
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Get transaction history for a wallet.
+
+        Parameters
+        ----------
+        wallet_id : str
+            UBP wallet identifier.
+        limit : int
+            Number of transactions to return.
+        offset : int
+            Offset for pagination.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Transaction history with pagination info.
+        """
+        try:
+            # Get wallet from database
+            wallet_info = self.get_wallet_by_id(wallet_id)
+            if not wallet_info:
+                return {"error": "Wallet not found"}
+
+            with self.db.get_session() as session:
+                # Get wallet UUID
+                wallet = session.query(Wallet).filter(
+                    Wallet.wallet_id == wallet_id,
+                    Wallet.is_active == True
+                ).first()
+
+                if not wallet:
+                    return {"error": "Wallet not found in database"}
+
+                # Query transactions
+                query = session.query(UserTransaction).filter(
+                    UserTransaction.wallet_id == wallet.id
+                )
+
+                # Get total count
+                total = query.count()
+
+                # Get paginated results
+                transactions = query.order_by(
+                    desc(UserTransaction.created_at)
+                ).limit(limit).offset(offset).all()
+
+                result = []
+                for tx in transactions:
+                    result.append({
+                        "id": str(tx.id),
+                        "tx_hash": tx.tx_hash,
+                        "blockchain": tx.blockchain,
+                        "from_address": tx.from_address,
+                        "to_address": tx.to_address,
+                        "amount": float(tx.amount) if tx.amount else 0,
+                        "asset": tx.asset,
+                        "status": tx.status,
+                        "confirmations": tx.confirmations,
+                        "fee": float(tx.fee) if tx.fee else None,
+                        "created_at": tx.created_at.isoformat() if tx.created_at else None,
+                        "confirmed_at": tx.confirmed_at.isoformat() if tx.confirmed_at else None,
+                    })
+
+                return {
+                    "transactions": result,
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "total_pages": (total + limit - 1) // limit if total > 0 else 1,
+                }
+
+        except Exception as e:
+            logger.error(f"Error getting transaction history: {e}")
+            return {"error": str(e)}
+
+    def get_token_holdings(self, wallet_id: str) -> Dict[str, Any]:
+        """
+        Get token holdings for a wallet.
+
+        Parameters
+        ----------
+        wallet_id : str
+            UBP wallet identifier.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Token holdings list.
+        """
+        try:
+            # Get wallet from database
+            wallet_info = self.get_wallet_by_id(wallet_id)
+            if not wallet_info:
+                return {"error": "Wallet not found"}
+
+            blockchain = wallet_info.get("blockchain", "ethereum")
+            address = wallet_info.get("address")
+
+            tokens = []
+
+            # For Ethereum, we could query ERC-20 tokens
+            # This is a placeholder - in production, you'd:
+            # 1. Get all token contracts the address has interacted with
+            # 2. Query each contract for balance
+            # 3. Get token metadata (name, symbol, decimals)
+            if blockchain == "ethereum" and self.eth_provider:
+                # Placeholder: Return known tokens with 0 balance
+                # In production, you'd query the blockchain for actual token holdings
+                known_tokens = [
+                    {
+                        "contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                        "name": "USD Coin",
+                        "symbol": "USDC",
+                        "decimals": 6,
+                        "logo_url": "https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png",
+                    },
+                    {
+                        "contract_address": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+                        "name": "Dai Stablecoin",
+                        "symbol": "DAI",
+                        "decimals": 18,
+                        "logo_url": "https://assets.coingecko.com/coins/images/9956/small/4943.png",
+                    },
+                    {
+                        "contract_address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+                        "name": "Wrapped Ether",
+                        "symbol": "WETH",
+                        "decimals": 18,
+                        "logo_url": "https://assets.coingecko.com/coins/images/2518/small/weth.png",
+                    },
+                ]
+
+                # For each token, try to get balance
+                for token in known_tokens:
+                    try:
+                        from ethereum.tokens import get_token_balance
+                        balance = get_token_balance(token["contract_address"], address)
+                        tokens.append({
+                            "contract_address": token["contract_address"],
+                            "name": token["name"],
+                            "symbol": token["symbol"],
+                            "decimals": token["decimals"],
+                            "balance": balance if balance is not None else 0,
+                            "balance_formatted": (balance / (10 ** token["decimals"])) if balance is not None else 0,
+                            "logo_url": token.get("logo_url"),
+                        })
+                    except Exception as e:
+                        logger.warning(f"Could not fetch balance for token {token['symbol']}: {e}")
+                        tokens.append({
+                            "contract_address": token["contract_address"],
+                            "name": token["name"],
+                            "symbol": token["symbol"],
+                            "decimals": token["decimals"],
+                            "balance": 0,
+                            "balance_formatted": 0,
+                            "logo_url": token.get("logo_url"),
+                            "error": str(e),
+                        })
+
+            elif blockchain == "tron" and self.tron_provider:
+                # Placeholder for TRC-20 tokens
+                known_tokens = [
+                    {
+                        "contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+                        "name": "Tether USD",
+                        "symbol": "USDT",
+                        "decimals": 6,
+                        "logo_url": "https://assets.coingecko.com/coins/images/325/small/Tether.png",
+                    },
+                ]
+
+                for token in known_tokens:
+                    try:
+                        from tron.contracts import get_trc20_balance
+                        balance = get_trc20_balance(token["contract_address"], address)
+                        tokens.append({
+                            "contract_address": token["contract_address"],
+                            "name": token["name"],
+                            "symbol": token["symbol"],
+                            "decimals": token["decimals"],
+                            "balance": balance if balance is not None else 0,
+                            "balance_formatted": (balance / (10 ** token["decimals"])) if balance is not None else 0,
+                            "logo_url": token.get("logo_url"),
+                        })
+                    except Exception as e:
+                        logger.warning(f"Could not fetch balance for token {token['symbol']}: {e}")
+                        tokens.append({
+                            "contract_address": token["contract_address"],
+                            "name": token["name"],
+                            "symbol": token["symbol"],
+                            "decimals": token["decimals"],
+                            "balance": 0,
+                            "balance_formatted": 0,
+                            "logo_url": token.get("logo_url"),
+                            "error": str(e),
+                        })
+
+            elif blockchain == "bitcoin":
+                # Bitcoin doesn't have tokens
+                return {
+                    "tokens": [],
+                    "blockchain": "bitcoin",
+                    "message": "Bitcoin does not support tokens",
+                }
+
+            return {
+                "tokens": tokens,
+                "blockchain": blockchain,
+                "address": address,
+                "total_tokens": len(tokens),
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting token holdings: {e}")
+            return {"error": str(e)}
+
     def send_transaction(self, wallet_id: str, to_address: str, amount: float, asset: str = None) -> Dict[str, Any]:
         """
         Send a transaction from a wallet.
@@ -640,17 +955,23 @@ class WalletService:
             if change_sats > 1000:
                 outputs[from_address] = change_sats / 100_000_000
 
-            # Step 7: Create raw transaction (use local node if available)
-            if self.btc_provider:
-                try:
-                    raw_tx = self.btc_provider.create_raw_transaction(inputs, outputs)
-                except:
-                    raw_tx = self._create_raw_transaction_manual(inputs, outputs)
-            else:
-                raw_tx = self._create_raw_transaction_manual(inputs, outputs)
-            
+            # Step 7: Create raw transaction using the configured Bitcoin provider.
+            #
+            # Do not fall back to a synthetic/manual transaction builder here.
+            # A malformed raw transaction must never reach the signing or
+            # broadcast stages. If the provider cannot construct the transaction,
+            # fail safely and report the provider error to the caller.
+            if not self.btc_provider:
+                return {"error": "Bitcoin provider not available for transaction creation"}
+
+            try:
+                raw_tx = self.btc_provider.create_raw_transaction(inputs, outputs)
+            except Exception as e:
+                logger.error(f"Bitcoin raw transaction creation failed: {e}")
+                return {"error": f"Failed to create Bitcoin raw transaction: {e}"}
+
             if not raw_tx:
-                return {"error": "Failed to create raw transaction"}
+                return {"error": "Bitcoin provider returned an empty raw transaction"}
 
             # Step 8: Sign the transaction
             signer = BitcoinTransactionSigner()
@@ -699,10 +1020,22 @@ class WalletService:
             logger.error(f"Error sending BTC transaction: {e}")
             return {"error": str(e)}
 
-    def _create_raw_transaction_manual(self, inputs: list, outputs: dict) -> str:
-        """Manually create a raw transaction (simplified)."""
-        # This is a placeholder - in production, use a proper library
-        return "0200000001" + "0" * 128 + "01" + "0" * 40 + "00000000"
+    def _create_raw_transaction_manual(self, inputs: list, outputs: dict) -> Optional[str]:
+        """
+        Deprecated manual Bitcoin transaction builder.
+
+        A synthetic transaction is unsafe because it can appear structurally
+        valid while not representing the supplied UTXOs and outputs. The wallet
+        service therefore refuses to construct one and returns ``None``.
+
+        This method is retained temporarily for API/test compatibility; callers
+        must use a real Bitcoin transaction builder/provider instead.
+        """
+        logger.error(
+            "Manual Bitcoin raw transaction construction is disabled; "
+            "a real Bitcoin transaction builder is required."
+        )
+        return None
 
     def _send_raw_transaction_manual(self, signed_tx: str) -> str:
         """Manually broadcast a raw transaction via blockchain.info."""
@@ -717,7 +1050,8 @@ class WalletService:
                 return response.text.strip()
             return None
         except:
-            return None  
+            return None
+
     def _send_trx_transaction(self, from_address: str, to_address: str, amount: float, private_key: bytes) -> Dict[str, Any]:
         """
         Send a TRON transaction using direct TronGrid API with ecdsa signing.
@@ -839,6 +1173,7 @@ class WalletService:
         except Exception as e:
             logger.error(f"Error sending TRX transaction: {e}")
             return {"error": str(e)}
+
     def _send_trx_transaction_fallback(self, from_address: str, to_address: str, amount_sun: int, private_key: bytes) -> Dict[str, Any]:
         """
         Fallback method for sending TRX using direct TronGrid API calls.
@@ -950,6 +1285,7 @@ class WalletService:
         except Exception as e:
             logger.error(f"TRON fallback transaction failed: {e}")
             return {"error": f"TRON transaction failed: {str(e)}"}
+
     def _get_native_asset(self, blockchain: str) -> str:
         """Get native asset symbol for blockchain."""
         assets = {
@@ -974,4 +1310,4 @@ class WalletService:
 
 ###############################################################################
 # End of File
-###############################################################################
+#########################
