@@ -36,7 +36,12 @@ from controllers.tron_controller import TronController
 from core.logger import get_logger
 
 # Import authentication
-from web.auth import auth_bp, load_user, get_user_manager, require_api_key, authenticate_api_key
+from web.auth import (
+    auth_bp,
+    load_user,
+    get_user_manager,
+    api_key_required,
+)
 from web.permissions import require_permission, Permission, require_role, has_permission
 
 logger = get_logger(__name__)
@@ -106,17 +111,6 @@ def api_login_required(f):
             return jsonify({"success": False, "error": "Please login first"}), 401
         return f(*args, **kwargs)
     return decorated_function
-
-def require_api_key(func):
-    """Decorator to require API key authentication."""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        user = authenticate_api_key(request)
-        if user:
-            request.user = user
-            return func(*args, **kwargs)
-        return jsonify({"error": "Invalid or missing API key"}), 401
-    return wrapper
 
 # ============ Page Routes ============
 

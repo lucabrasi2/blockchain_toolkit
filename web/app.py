@@ -45,7 +45,12 @@ from controllers.tron_controller import TronController
 from core.logger import get_logger
 
 # Import authentication
-from web.auth import auth_bp, load_user, get_user_manager, require_api_key, authenticate_api_key
+from web.auth import (
+    auth_bp,
+    load_user,
+    get_user_manager,
+    api_key_required,
+)
 
 # Import SocketIO
 from web.ws import socketio, init_socketio, start_monitoring
@@ -111,19 +116,6 @@ def convert_to_serializable(obj):
     else:
         return obj
 
-
-def require_api_key(func):
-    """Decorator to require API key authentication."""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        user = authenticate_api_key(request)
-        if user:
-            request.user = user
-            return func(*args, **kwargs)
-        return jsonify({"error": "Invalid or missing API key"}), 401
-    return wrapper
-
-
 # ============ Page Routes ============
 
 @app.route('/')
@@ -176,7 +168,7 @@ def ethereum_wallet():
         if not address:
             return jsonify({"error": "Address required"}), 400
         report = eth_controller.wallet_inspector(address)
-        
+
         # Save to database
         try:
             from database import get_db_manager
@@ -184,7 +176,7 @@ def ethereum_wallet():
             db.save_wallet_inspection(address, 'ethereum', report)
         except Exception as e:
             logger.warning(f"Could not save to database: {e}")
-        
+
         return jsonify(convert_to_serializable(report))
     except Exception as e:
         logger.error(f"Ethereum wallet error: {e}")
@@ -372,17 +364,17 @@ def tron_block():
     try:
         data = request.json
         block = data.get('block', 'latest')
-        
+
         from tron.blocks import get_block, get_latest_block_number
-        
+
         if block == 'latest':
             block_num = get_latest_block_number()
             report = get_block(block_num)
         else:
             report = get_block(int(block))
-        
+
         return jsonify(convert_to_serializable(report))
-        
+
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -412,21 +404,21 @@ def dashboard_stats():
     try:
         from database import get_db_manager
         db = get_db_manager()
-        
+
         with db.get_session() as session:
             from database.models import WalletInspection, ContractInspection, TransactionHistory, CacheEntry
-            
+
             # Count by blockchain
             eth_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'ethereum').count()
             btc_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'bitcoin').count()
             tron_wallets = session.query(WalletInspection).filter(WalletInspection.blockchain == 'tron').count()
-            
+
             eth_contracts = session.query(ContractInspection).filter(ContractInspection.blockchain == 'ethereum').count()
             tron_contracts = session.query(ContractInspection).filter(ContractInspection.blockchain == 'tron').count()
-            
+
             total_transactions = session.query(TransactionHistory).count()
             cache_entries = session.query(CacheEntry).count()
-            
+
             return jsonify({
                 "total_inspections": eth_wallets + btc_wallets + tron_wallets + eth_contracts + tron_contracts,
                 "ethereum": eth_wallets + eth_contracts,
@@ -447,12 +439,12 @@ def dashboard_recent():
     try:
         from database import get_db_manager
         db = get_db_manager()
-        
+
         with db.get_session() as session:
             from database.models import WalletInspection, ContractInspection, TransactionHistory
-            
+
             results = []
-            
+
             # Get recent wallet inspections
             wallets = session.query(WalletInspection).order_by(WalletInspection.created_at.desc()).limit(10).all()
             for w in wallets:
@@ -462,7 +454,7 @@ def dashboard_recent():
                     "address": w.address,
                     "created_at": w.created_at.strftime("%Y-%m-%d %H:%M") if w.created_at else None,
                 })
-            
+
             # Get recent contract inspections
             contracts = session.query(ContractInspection).order_by(ContractInspection.created_at.desc()).limit(10).all()
             for c in contracts:
@@ -472,7 +464,7 @@ def dashboard_recent():
                     "address": c.address,
                     "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None,
                 })
-            
+
             # Get recent transactions
             txs = session.query(TransactionHistory).order_by(TransactionHistory.created_at.desc()).limit(10).all()
             for t in txs:
@@ -483,10 +475,10 @@ def dashboard_recent():
                     "status": t.status,
                     "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else None,
                 })
-            
+
             # Sort by created_at (most recent first)
             results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-            
+
             return jsonify(results[:20])
     except Exception as e:
         logger.error(f"Dashboard recent error: {e}")
@@ -503,17 +495,17 @@ def history():
         blockchain = request.args.get('blockchain', '')
         type_filter = request.args.get('type', '')
         search = request.args.get('search', '')
-        
+
         from database import get_db_manager
         db = get_db_manager()
-        
+
         offset = (page - 1) * limit
-        
+
         with db.get_session() as session:
             from database.models import WalletInspection, ContractInspection, TransactionHistory
-            
+
             items = []
-            
+
             # Wallet inspections
             query = session.query(WalletInspection)
             if blockchain:
@@ -530,7 +522,7 @@ def history():
                     "status": True,
                     "created_at": w.created_at.strftime("%Y-%m-%d %H:%M") if w.created_at else None,
                 })
-            
+
             # Contract inspections
             if not type_filter or type_filter == 'contract':
                 query = session.query(ContractInspection)
@@ -548,7 +540,7 @@ def history():
                         "status": True,
                         "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None,
                     })
-            
+
             # Transaction history
             if not type_filter or type_filter == 'transaction':
                 query = session.query(TransactionHistory)
@@ -566,11 +558,11 @@ def history():
                         "status": t.status,
                         "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else None,
                     })
-            
+
             # Sort and paginate
             items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             total = len(items)
-            
+
             return jsonify({
                 "items": items[:limit],
                 "total": total,
@@ -591,12 +583,12 @@ def export_data(export_type):
     try:
         from database import get_db_manager
         db = get_db_manager()
-        
+
         with db.get_session() as session:
             from database.models import WalletInspection, ContractInspection, TransactionHistory
-            
+
             results = []
-            
+
             if export_type in ['wallet', 'all']:
                 wallets = session.query(WalletInspection).order_by(WalletInspection.created_at.desc()).all()
                 for w in wallets:
@@ -608,7 +600,7 @@ def export_data(export_type):
                         "classification": w.classification,
                         "created_at": w.created_at.strftime("%Y-%m-%d %H:%M") if w.created_at else None,
                     })
-            
+
             if export_type in ['contract', 'all']:
                 contracts = session.query(ContractInspection).order_by(ContractInspection.created_at.desc()).all()
                 for c in contracts:
@@ -621,7 +613,7 @@ def export_data(export_type):
                         "standard": c.standard,
                         "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None,
                     })
-            
+
             if export_type in ['transaction', 'all']:
                 txs = session.query(TransactionHistory).order_by(TransactionHistory.created_at.desc()).all()
                 for t in txs:
@@ -635,7 +627,7 @@ def export_data(export_type):
                         "status": "Success" if t.status else "Failed" if t.status is False else "Pending",
                         "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else None,
                     })
-            
+
             return jsonify(results)
     except Exception as e:
         logger.error(f"Export error: {e}")
