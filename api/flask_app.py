@@ -152,13 +152,9 @@ def get_json_body() -> Tuple[
     Returns
     -------
     tuple
-        A tuple containing:
+        ``(data, None)`` when parsing succeeds.
 
-        (data, None)
-            when parsing succeeds.
-
-        (None, error_response)
-            when the request is invalid.
+        ``(None, error_response)`` when the request is invalid.
     """
     if not request.is_json:
         return None, error_response(
@@ -168,7 +164,6 @@ def get_json_body() -> Tuple[
 
     try:
         data = request.get_json(silent=True)
-
     except Exception as exc:
         logger.warning(
             "Failed to parse JSON request: %s",
@@ -198,7 +193,7 @@ def get_required_field(
     Optional[Any],
 ]:
     """
-    Retrieve a required field from a request payload.
+    Retrieve and validate a required request field.
     """
     value = data.get(field_name)
 
@@ -300,12 +295,11 @@ def api_route(operation: str) -> Callable:
     """
     Decorate an API endpoint with consistent exception handling.
 
-    Existing endpoint behavior is preserved while removing repetitive
-    try/except blocks from individual routes.
+    The decorator preserves the existing API behavior while removing
+    repetitive try/except blocks from individual routes.
     """
 
     def decorator(view_func: Callable) -> Callable:
-
         @wraps(view_func)
         def wrapped(*args, **kwargs):
             try:
@@ -350,7 +344,7 @@ def get_endpoint_documentation() -> Dict[str, Any]:
     """
     Return the API endpoint documentation.
 
-    This contains only the endpoints exposed by the original API.
+    This represents the endpoints exposed by the Flask API.
     """
     return {
         "ethereum": {
@@ -383,17 +377,17 @@ def root():
     """
     Return general API information.
     """
-    return success_response({
-        "name": API_NAME,
-        "version": API_VERSION,
-        "status": "operational",
-        "blockchains": list(
-            SUPPORTED_BLOCKCHAINS
-        ),
-        "endpoints": get_endpoint_documentation(),
-        "documentation": "/api/docs",
-        "health": "/health",
-    })
+    return success_response(
+        {
+            "name": API_NAME,
+            "version": API_VERSION,
+            "status": "operational",
+            "blockchains": list(SUPPORTED_BLOCKCHAINS),
+            "endpoints": get_endpoint_documentation(),
+            "documentation": "/api/docs",
+            "health": "/health",
+        }
+    )
 
 
 # ============================================================================
@@ -426,20 +420,22 @@ def health_check():
             exc,
         )
 
-    return jsonify({
-        "status": (
-            "healthy"
-            if connected
-            else "degraded"
-        ),
-        "timestamp": datetime.now(
-            timezone.utc
-        ).isoformat(),
-        "blockchain": "Ethereum",
-        "chain_id": chain_id,
-        "block_number": block_number,
-        "connected": connected,
-    })
+    return jsonify(
+        {
+            "status": (
+                "healthy"
+                if connected
+                else "degraded"
+            ),
+            "timestamp": datetime.now(
+                timezone.utc
+            ).isoformat(),
+            "blockchain": "Ethereum",
+            "chain_id": chain_id,
+            "block_number": block_number,
+            "connected": connected,
+        }
+    )
 
 
 # ============================================================================
@@ -451,68 +447,50 @@ def api_docs():
     """
     Return API endpoint documentation.
     """
-    return success_response({
-        "title": API_NAME,
-        "version": API_VERSION,
-        "description": (
-            "Enterprise-grade blockchain intelligence API"
-        ),
-        "endpoints": {
-            "GET /":
-                "API information",
-
-            "GET /health":
-                "Health check",
-
-            "GET /api/docs":
-                "This documentation",
-
-            "GET /api/ethereum/gas/price":
-                "Get current Ethereum gas price",
-
-            "POST /api/ethereum/gas/estimate":
-                "Estimate Ethereum gas cost",
-
-            "GET /api/ethereum/gas/optimal":
-                "Get optimal Ethereum gas price",
-
-            "POST /api/ethereum/wallet/inspect":
-                "Inspect Ethereum wallet",
-
-            "POST /api/ethereum/contract/inspect":
-                "Inspect Ethereum contract",
-
-            "POST /api/ethereum/token/inspect":
-                "Inspect ERC-20 token",
-
-            "POST /api/ethereum/block/explore":
-                "Explore Ethereum block",
-
-            "POST /api/ethereum/transaction/analyze":
-                "Analyze Ethereum transaction",
-
-            "POST /api/bitcoin/wallet/inspect":
-                "Inspect Bitcoin wallet",
-
-            "POST /api/bitcoin/block/explore":
-                "Explore Bitcoin block",
-
-            "POST /api/bitcoin/transaction/analyze":
-                "Analyze Bitcoin transaction",
-
-            "POST /api/tron/wallet/inspect":
-                "Inspect TRON wallet",
-
-            "POST /api/tron/contract/inspect":
-                "Inspect TRON contract",
-
-            "POST /api/tron/token/inspect":
-                "Inspect TRC-20 token",
-
-            "POST /api/node/validate":
-                "Validate blockchain node",
-        },
-    })
+    return success_response(
+        {
+            "title": API_NAME,
+            "version": API_VERSION,
+            "description": (
+                "Enterprise-grade blockchain intelligence API"
+            ),
+            "endpoints": {
+                "GET /": "API information",
+                "GET /health": "Health check",
+                "GET /api/docs": "This documentation",
+                "GET /api/ethereum/gas/price":
+                    "Get current Ethereum gas price",
+                "POST /api/ethereum/gas/estimate":
+                    "Estimate Ethereum gas cost",
+                "GET /api/ethereum/gas/optimal":
+                    "Get optimal Ethereum gas price",
+                "POST /api/ethereum/wallet/inspect":
+                    "Inspect Ethereum wallet",
+                "POST /api/ethereum/contract/inspect":
+                    "Inspect Ethereum contract",
+                "POST /api/ethereum/token/inspect":
+                    "Inspect ERC-20 token",
+                "POST /api/ethereum/block/explore":
+                    "Explore Ethereum block",
+                "POST /api/ethereum/transaction/analyze":
+                    "Analyze Ethereum transaction",
+                "POST /api/bitcoin/wallet/inspect":
+                    "Inspect Bitcoin wallet",
+                "POST /api/bitcoin/block/explore":
+                    "Explore Bitcoin block",
+                "POST /api/bitcoin/transaction/analyze":
+                    "Analyze Bitcoin transaction",
+                "POST /api/tron/wallet/inspect":
+                    "Inspect TRON wallet",
+                "POST /api/tron/contract/inspect":
+                    "Inspect TRON contract",
+                "POST /api/tron/token/inspect":
+                    "Inspect TRC-20 token",
+                "POST /api/node/validate":
+                    "Validate blockchain node",
+            },
+        }
+    )
 
 
 # ============================================================================
@@ -524,13 +502,15 @@ def not_found(error):
     """
     Handle unknown routes.
     """
-    return jsonify({
-        "error": "Endpoint not found",
-        "message": (
-            "Please check the API documentation "
-            "at /api/docs"
-        ),
-    }), 404
+    return jsonify(
+        {
+            "error": "Endpoint not found",
+            "message": (
+                "Please check the API documentation "
+                "at /api/docs"
+            ),
+        }
+    ), 404
 
 
 @app.errorhandler(500)
@@ -543,12 +523,14 @@ def internal_error(error):
         error,
     )
 
-    return jsonify({
-        "error": "Internal server error",
-        "message": (
-            "An unexpected error occurred"
-        ),
-    }), 500
+    return jsonify(
+        {
+            "error": "Internal server error",
+            "message": (
+                "An unexpected error occurred"
+            ),
+        }
+    ), 500
 
 
 # ============================================================================
@@ -654,6 +636,8 @@ def inspect_ethereum_token():
     )
 
     return jsonify(report)
+
+
 # ============================================================================
 # Ethereum Block Endpoint
 # ============================================================================
@@ -748,9 +732,11 @@ def get_ethereum_gas_price():
     if isinstance(gas_price, dict):
         return jsonify(gas_price)
 
-    return jsonify({
-        "gas_price": gas_price,
-    })
+    return jsonify(
+        {
+            "gas_price": gas_price,
+        }
+    )
 
 
 # ============================================================================
@@ -829,8 +815,7 @@ def get_optimal_gas_price():
     )
 
     logger.info(
-        "API: Getting optimal gas price - "
-        "urgency=%s",
+        "API: Getting optimal gas price - urgency=%s",
         urgency,
     )
 
@@ -1051,6 +1036,8 @@ def inspect_tron_token():
     )
 
     return jsonify(report)
+
+
 # ============================================================================
 # Node Validation Endpoint
 # ============================================================================
@@ -1069,8 +1056,8 @@ def validate_node():
             "address": "https://..."
         }
 
-    The existing API contract uses the ``address`` field for the
-    node/RPC endpoint.
+    The existing API contract uses the ``address`` field for
+    the node/RPC endpoint.
     """
     data, error = get_json_body()
 
@@ -1078,6 +1065,9 @@ def validate_node():
         return error
 
     rpc_url = data.get("address")
+
+    if isinstance(rpc_url, str):
+        rpc_url = rpc_url.strip() or None
 
     logger.info(
         "API: Validating node: %s",
@@ -1092,14 +1082,14 @@ def validate_node():
 
 
 # ============================================================================
-# Application Startup
+# Application Factory
 # ============================================================================
 
 def create_app() -> Flask:
     """
     Return the configured Flask application.
 
-    The application object is already initialized at module level.
+    The application object is initialized at module level.
     This factory is provided for WSGI servers and testing without
     changing the existing ``app`` entry point.
     """
