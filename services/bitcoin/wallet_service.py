@@ -12,10 +12,10 @@ Business logic for Bitcoin wallet operations.
 
 Responsibilities
 ----------------
-• Validate Bitcoin wallet addresses
-• Retrieve wallet balances
-• Retrieve wallet metadata
-• Generate controller-friendly wallet reports
+- Validate Bitcoin wallet addresses
+- Retrieve wallet balances
+- Retrieve wallet metadata
+- Generate controller-friendly wallet reports
 
 Author
 ------
@@ -35,50 +35,117 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.logger import get_logger
-
 from bitcoin.wallets import (
     get_address_info,
     get_btc_balance,
     is_valid_address,
 )
 
+from core.logger import get_logger
 
-###############################################################################
-# Logger
-###############################################################################
 
 logger = get_logger(__name__)
 
 
-###############################################################################
+# =============================================================================
 # Bitcoin Wallet Service
-###############################################################################
+# =============================================================================
 
 
 class BitcoinWalletService:
     """
     Bitcoin wallet business logic service.
+
+    The service coordinates Bitcoin address validation, blockchain data
+    retrieval, address metadata, and construction of normalized wallet
+    reports for higher application layers.
     """
 
-    ###########################################################################
+    # =========================================================================
     # Construction
-    ###########################################################################
+    # =========================================================================
 
-    def __init__(
-        self,
-    ) -> None:
-        """
-        Initialize the Bitcoin Wallet Service.
-        """
-
+    def __init__(self) -> None:
+        """Initialize the Bitcoin Wallet Service."""
         logger.info(
             "BitcoinWalletService initialized."
         )
 
-    ###########################################################################
+    # =========================================================================
+    # Address Validation
+    # =========================================================================
+
+    @staticmethod
+    def validate_address(
+        address: str,
+    ) -> bool:
+        """
+        Validate a Bitcoin wallet address.
+
+        Parameters
+        ----------
+        address:
+            Bitcoin wallet address.
+
+        Returns
+        -------
+        bool
+            ``True`` when the address is valid.
+        """
+        if not isinstance(address, str):
+            return False
+
+        address = address.strip()
+
+        if not address:
+            return False
+
+        return bool(
+            is_valid_address(address)
+        )
+
+    # =========================================================================
+    # Address Classification
+    # =========================================================================
+
+    @staticmethod
+    def _get_address_type(
+        address: str,
+    ) -> tuple[bool, str]:
+        """
+        Determine the basic Bitcoin address script type.
+
+        Parameters
+        ----------
+        address:
+            Bitcoin wallet address.
+
+        Returns
+        -------
+        tuple[bool, str]
+            A tuple containing:
+
+            - whether the address is a SegWit/witness address
+            - normalized script type label
+        """
+        is_witness = address.lower().startswith(
+            "bc1"
+        )
+
+        script_type = (
+            "Witness"
+            if is_witness
+            else "Legacy"
+        )
+
+        return (
+            is_witness,
+            script_type,
+        )
+
+    # =========================================================================
     # Wallet Report
-    ###########################################################################
+    # =========================================================================
 
     def get_wallet_report(
         self,
@@ -89,73 +156,90 @@ class BitcoinWalletService:
 
         Parameters
         ----------
-        address : str
+        address:
             Bitcoin wallet address.
 
         Returns
         -------
         dict[str, Any]
-            Bitcoin wallet report.
-        """
+            Normalized Bitcoin wallet report.
 
+        Notes
+        -----
+        Invalid addresses return a structured error response rather than
+        raising an exception. This preserves the existing service contract.
+        """
         logger.info(
             "Generating Bitcoin wallet report for: %s",
             address,
         )
 
+        if not isinstance(address, str):
+            logger.warning(
+                "Invalid Bitcoin address type."
+            )
+
+            return {
+                "address": address,
+                "error": "Invalid Bitcoin address",
+                "is_valid": False,
+            }
+
+        normalized_address = address.strip()
+
+        if not self.validate_address(
+            normalized_address
+        ):
+            logger.warning(
+                "Invalid Bitcoin address: %s",
+                normalized_address,
+            )
+
+            return {
+                "address": normalized_address,
+                "error": "Invalid Bitcoin address",
+                "is_valid": False,
+            }
+
         try:
-
-            ###################################################################
-            # Validate Address
-            ###################################################################
-
-            if not is_valid_address(
-                address,
-            ):
-
-                logger.warning(
-                    "Invalid Bitcoin address: %s",
-                    address,
-                )
-
-                return {
-                    "address": address,
-                    "error": "Invalid Bitcoin address",
-                    "is_valid": False,
-                }
-
-            ###################################################################
-            # Retrieve Blockchain Data
-            ###################################################################
+            # -----------------------------------------------------------------
+            # Retrieve blockchain data
+            # -----------------------------------------------------------------
 
             balance = get_btc_balance(
-                address,
+                normalized_address
             )
 
             address_info = get_address_info(
-                address,
+                normalized_address
             )
 
-            ###################################################################
-            # Determine Address Type
-            ###################################################################
+            # -----------------------------------------------------------------
+            # Determine address type
+            # -----------------------------------------------------------------
 
-            is_witness = address.startswith(
-                "bc1"
+            is_witness, script_type = (
+                self._get_address_type(
+                    normalized_address
+                )
             )
 
-            script_type = (
-                "Witness"
-                if is_witness
-                else "Legacy"
-            )
+            # -----------------------------------------------------------------
+            # Normalize returned blockchain data
+            # -----------------------------------------------------------------
 
-            ###################################################################
-            # Build Report
-            ###################################################################
+            if not isinstance(balance, dict):
+                balance = {}
+
+            if not isinstance(address_info, dict):
+                address_info = {}
+
+            # -----------------------------------------------------------------
+            # Build normalized report
+            # -----------------------------------------------------------------
 
             report: dict[str, Any] = {
-                "address": address,
+                "address": normalized_address,
 
                 "balance_btc": balance.get(
                     "btc",
@@ -203,10 +287,6 @@ class BitcoinWalletService:
                 "script_type": script_type,
             }
 
-            ###################################################################
-            # Return Report
-            ###################################################################
-
             logger.info(
                 "Bitcoin wallet report generated successfully."
             )
@@ -214,21 +294,31 @@ class BitcoinWalletService:
             return report
 
         except Exception:
-
             logger.exception(
                 "Failed to generate Bitcoin wallet report."
             )
-
             raise
-###############################################################################
+
+    # =========================================================================
+    # Representation
+    # =========================================================================
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"{self.__class__.__name__}()"
+        )
+
+
+# =============================================================================
 # Public Exports
-###############################################################################
+# =============================================================================
 
 __all__ = [
     "BitcoinWalletService",
 ]
 
 
-###############################################################################
+# =============================================================================
 # End of File
-###############################################################################
+# =============================================================================
