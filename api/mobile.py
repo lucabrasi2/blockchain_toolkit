@@ -8,7 +8,7 @@ api.mobile
 
 Purpose
 -------
-Mobile API Blueprint for the UBP React Native / Expo client.
+Mobile API HTTP adapter for the UBP React Native / Expo client.
 
 Architecture
 ------------
@@ -20,19 +20,30 @@ Business logic remains in:
     - blockchain controllers
     - database models
 
+Authentication
+--------------
 Mobile authentication uses a signed, time-limited access token.
-The user's permanent API key is not exposed to the mobile client.
+
+The user's permanent API key is never exposed to the mobile client.
 ===============================================================================
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
 from functools import wraps
+from typing import Any, Callable, Dict, Optional, Tuple
 
-from flask import Blueprint, current_app, jsonify, request
-from itsdangerous import BadSignature, SignatureExpired
-from itsdangerous import URLSafeTimedSerializer
+from flask import (
+    Blueprint,
+    current_app,
+    jsonify,
+    request,
+)
+from itsdangerous import (
+    BadSignature,
+    SignatureExpired,
+    URLSafeTimedSerializer,
+)
 
 
 # =============================================================================
@@ -47,55 +58,261 @@ mobile_bp = Blueprint(
 
 
 # =============================================================================
-# Token Configuration
+# Configuration
 # =============================================================================
 
 MOBILE_TOKEN_MAX_AGE = 60 * 60 * 24
 
-# Supported mobile wallet networks. Keep this list aligned with the
-# wallet service capabilities rather than accepting arbitrary blockchain names.
-SUPPORTED_BLOCKCHAINS = frozenset({"ethereum", "bitcoin", "tron"})
+SUPPORTED_BLOCKCHAINS = frozenset(
+    {
+        "ethereum",
+        "bitcoin",
+        "tron",
+    }
+)
 
-# Transaction-history pagination limits. The API keeps the existing default
-# while preventing pathological requests from the mobile client.
 DEFAULT_PAGE_LIMIT = 20
 MAX_PAGE_LIMIT = 100
 
 
-def _error_response(message: str, status_code: int):
-    """Return the standard mobile API error response."""
-    return jsonify({"success": False, "error": message}), status_code
+# =============================================================================
+# Response Helpers
+# =============================================================================
+
+def _success_response(
+    data: Optional[Dict[str, Any]] = None,
+    status_code: int = 200,
+    **extra: Any,
+):
+    """
+    Return a consistent successful mobile API response.
+    """
+    payload: Dict[str, Any] = {
+        "success": True,
+    }
+
+    if data:
+        payload.update(data)
+
+    if extra:
+        payload.update(extra)
+
+    return jsonify(payload), status_code
+
+
+def _error_response(
+    message: str,
+    status_code: int = 400,
+):
+    """
+    Return a consistent mobile API error response.
+    """
+    return jsonify(
+        {
+            "success": False,
+            "error": message,
+        }
+    ), status_code
+
+
+def _request_json() -> Dict[str, Any]:
+    """
+    Safely return the request JSON object.
+
+    Invalid or missing JSON is represented as an empty dictionary.
+    """
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return {}
+
+    return data
+
+
+def _required_string(
+    data: Dict[str, Any],
+    field: str,
+    message: Optional[str] = None,
+    *,
+    lowercase: bool = False,
+) -> Tuple[Optional[str], Optional[Any]]:
+    """
+    Extract a required non-empty string field.
+
+    Returns
+    -------
+    tuple
+        ``(value, None)`` on success.
+        ``(None, error_response)`` on failure.
+    """
+    value = data.get(field)
+
+    if value is None:
+        return None, _error_response(
+            message or f"{field.replace('_', ' ').title()} is required",
+            400,
+        )
+
+    value = str(value).strip()
+
+    if not value:
+        return None, _error_response(
+            message or f"{field.replace('_', ' ').title()} is required",
+            400,
+        )
+
+    if lowercase:
+        value = value.lower()
+
+    return value, None
+
+
+# =============================================================================
+# Service Helpers
+# =============================================================================
+
+def _get_user_service():
+    """
+    Lazily construct the user service.
+
+    Lazy imports preserve the HTTP-adapter boundary and avoid unnecessary
+    initialization when the mobile module is imported.
+    """
+    from services.user_service import UserService
+
+    return UserService()
 
 
 def _get_wallet_service():
-    """Create the wallet service lazily to preserve the HTTP-adapter boundary."""
+    """
+    Lazily construct the wallet service.
+    """
     from services.wallet_service import WalletService
 
     return WalletService()
 
 
-def _get_owned_wallet(wallet_service, user_id, wallet_id):
-    """Return a wallet owned by ``user_id`` or ``None`` if inaccessible."""
+# =============================================================================
+# User Serialization
+# =============================================================================
+
+def _serialize_user(
+    user,
+    *,
+    include_network: bool = False,
+) -> Dict[str, Any]:
+    """
+    Convert a UBP user model/service object into the mobile-safe
+    representation.
+
+    Sensitive fields such as passwords and permanent API keys are never
+    included.
+    """
+    payload = {
+        "id": str(user.id),
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "is_verified": user.is_verified,
+    }
+
+    if include_network:
+        payload["default_network"] = user.default_network
+
+    return payload
+
+
+# =============================================================================
+# Wallet Ownership
+# =============================================================================
+
+def _get_owned_wallet(
+    wallet_service,
+    user_id,
+    wallet_id,
+):
+    """
+    Return a wallet owned by ``user_id``.
+
+    Returning ``None`` ensures callers cannot operate on wallets belonging
+    to another user.
+    """
     wallets = wallet_service.get_user_wallets(user_id)
+
     return next(
-        (wallet for wallet in wallets if wallet.get("wallet_id") == wallet_id),
+        (
+            wallet
+            for wallet in wallets
+            if wallet.get("wallet_id") == wallet_id
+        ),
         None,
     )
 
 
-def _parse_pagination():
-    """Parse and validate transaction-history pagination parameters."""
-    limit = request.args.get("limit", DEFAULT_PAGE_LIMIT, type=int)
-    offset = request.args.get("offset", 0, type=int)
+def _require_owned_wallet(
+    wallet_service,
+    user_id,
+    wallet_id,
+):
+    """
+    Validate wallet ownership and return either the wallet or an HTTP error.
+    """
+    wallet = _get_owned_wallet(
+        wallet_service,
+        user_id,
+        wallet_id,
+    )
 
-    if limit is None or limit < 1 or limit > MAX_PAGE_LIMIT:
-        return None, None, "Limit must be between 1 and 100"
+    if not wallet:
+        return None, _error_response(
+            "Wallet not found or access denied",
+            404,
+        )
+
+    return wallet, None
+
+
+# =============================================================================
+# Pagination
+# =============================================================================
+
+def _parse_pagination():
+    """
+    Parse and validate transaction-history pagination parameters.
+    """
+    limit = request.args.get(
+        "limit",
+        DEFAULT_PAGE_LIMIT,
+        type=int,
+    )
+
+    offset = request.args.get(
+        "offset",
+        0,
+        type=int,
+    )
+
+    if limit is None or not 1 <= limit <= MAX_PAGE_LIMIT:
+        return (
+            None,
+            None,
+            "Limit must be between 1 and 100",
+        )
 
     if offset is None or offset < 0:
-        return None, None, "Offset must be 0 or greater"
+        return (
+            None,
+            None,
+            "Offset must be 0 or greater",
+        )
 
     return limit, offset, None
 
+
+# =============================================================================
+# Mobile Access Tokens
+# =============================================================================
 
 def _token_serializer() -> URLSafeTimedSerializer:
     """
@@ -111,7 +328,7 @@ def _token_serializer() -> URLSafeTimedSerializer:
 
 def _create_access_token(user) -> str:
     """
-    Create a signed mobile access token for a user.
+    Create a signed mobile access token.
     """
     serializer = _token_serializer()
 
@@ -123,14 +340,20 @@ def _create_access_token(user) -> str:
     )
 
 
-def _decode_access_token(token: str):
+def _decode_access_token(
+    token: str,
+):
     """
     Validate and decode a mobile access token.
 
-    Returns:
-        Token payload on success.
-        None on invalid or expired token.
+    Returns
+    -------
+    dict | None
+        Token payload on success, otherwise ``None``.
     """
+    if not token:
+        return None
+
     serializer = _token_serializer()
 
     try:
@@ -138,81 +361,98 @@ def _decode_access_token(token: str):
             token,
             max_age=MOBILE_TOKEN_MAX_AGE,
         )
-    except (BadSignature, SignatureExpired):
+
+    except (
+        BadSignature,
+        SignatureExpired,
+    ):
         return None
 
 
-def _get_bearer_token():
+def _get_bearer_token() -> Optional[str]:
     """
     Extract a Bearer token from the Authorization header.
     """
-    authorization = request.headers.get("Authorization", "")
+    authorization = request.headers.get(
+        "Authorization",
+        "",
+    ).strip()
 
     if not authorization:
         return None
 
-    parts = authorization.split(" ", 1)
+    scheme, separator, token = authorization.partition(" ")
 
-    if len(parts) != 2:
+    if (
+        not separator
+        or scheme.lower() != "bearer"
+    ):
         return None
 
-    scheme, token = parts
+    token = token.strip()
 
-    if scheme.lower() != "bearer":
-        return None
-
-    return token.strip() or None
+    return token or None
 
 
-def mobile_auth_required(func):
+# =============================================================================
+# Authentication Decorator
+# =============================================================================
+
+def mobile_auth_required(
+    func: Callable,
+) -> Callable:
     """
     Require a valid mobile Bearer token.
 
-    The authenticated user is attached to request.mobile_user.
+    The authenticated user is attached to:
+
+        request.mobile_user
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         token = _get_bearer_token()
 
         if not token:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Missing Bearer token",
-                }
-            ), 401
+            return _error_response(
+                "Missing Bearer token",
+                401,
+            )
 
         payload = _decode_access_token(token)
 
         if not payload:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Invalid or expired access token",
-                }
-            ), 401
+            return _error_response(
+                "Invalid or expired access token",
+                401,
+            )
+
+        user_id = payload.get("user_id")
+
+        if not user_id:
+            return _error_response(
+                "Invalid access token",
+                401,
+            )
 
         try:
-            from services.user_service import UserService
+            user_service = _get_user_service()
 
-            user_service = UserService()
-            user = user_service.get_user_by_id(payload["user_id"])
+            user = user_service.get_user_by_id(
+                user_id
+            )
 
             if not user:
-                return jsonify(
-                    {
-                        "success": False,
-                        "error": "User not found",
-                    }
-                ), 401
+                return _error_response(
+                    "User not found",
+                    401,
+                )
 
             if not user.is_active:
-                return jsonify(
-                    {
-                        "success": False,
-                        "error": "User account is inactive",
-                    }
-                ), 403
+                return _error_response(
+                    "User account is inactive",
+                    403,
+                )
 
             request.mobile_user = user
 
@@ -222,14 +462,15 @@ def mobile_auth_required(func):
                 exc,
             )
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Authentication service unavailable",
-                }
-            ), 500
+            return _error_response(
+                "Authentication service unavailable",
+                500,
+            )
 
-        return func(*args, **kwargs)
+        return func(
+            *args,
+            **kwargs,
+        )
 
     return wrapper
 
@@ -243,13 +484,12 @@ def mobile_health():
     """
     Return the health status of the mobile API.
     """
-    return jsonify(
+    return _success_response(
         {
-            "success": True,
             "service": "UBP Mobile API",
             "status": "healthy",
         }
-    ), 200
+    )
 
 
 # =============================================================================
@@ -269,48 +509,43 @@ def mobile_register():
             "password": "..."
         }
     """
-    data = request.get_json(silent=True) or {}
+    data = _request_json()
 
-    username = str(data.get("username", "")).strip()
-    email = str(data.get("email", "")).strip().lower()
+    username, error = _required_string(
+        data,
+        "username",
+        "Username is required",
+    )
+
+    if error:
+        return error
+
+    email, error = _required_string(
+        data,
+        "email",
+        "Email is required",
+        lowercase=True,
+    )
+
+    if error:
+        return error
+
     password = data.get("password", "")
 
-    if not username:
-        return jsonify(
-            {
-                "success": False,
-                "error": "Username is required",
-            }
-        ), 400
-
-    if not email:
-        return jsonify(
-            {
-                "success": False,
-                "error": "Email is required",
-            }
-        ), 400
-
-    if not password:
-        return jsonify(
-            {
-                "success": False,
-                "error": "Password is required",
-            }
-        ), 400
+    if not isinstance(password, str) or not password:
+        return _error_response(
+            "Password is required",
+            400,
+        )
 
     if len(password) < 8:
-        return jsonify(
-            {
-                "success": False,
-                "error": "Password must contain at least 8 characters",
-            }
-        ), 400
+        return _error_response(
+            "Password must contain at least 8 characters",
+            400,
+        )
 
     try:
-        from services.user_service import UserService
-
-        user_service = UserService()
+        user_service = _get_user_service()
 
         user = user_service.create_user(
             username=username,
@@ -319,30 +554,21 @@ def mobile_register():
         )
 
         if not user:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Unable to create user",
-                }
-            ), 400
+            return _error_response(
+                "Unable to create user",
+                400,
+            )
 
         token = _create_access_token(user)
 
-        return jsonify(
+        return _success_response(
             {
-                "success": True,
                 "message": "Registration successful",
                 "token": token,
-                "user": {
-                    "id": str(user.id),
-                    "username": user.username,
-                    "email": user.email,
-                    "role": user.role,
-                    "is_active": user.is_active,
-                    "is_verified": user.is_verified,
-                },
-            }
-        ), 201
+                "user": _serialize_user(user),
+            },
+            201,
+        )
 
     except Exception as exc:
         current_app.logger.error(
@@ -350,12 +576,10 @@ def mobile_register():
             exc,
         )
 
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 400
+        return _error_response(
+            str(exc),
+            400,
+        )
 
 
 @mobile_bp.post("/auth/login")
@@ -369,34 +593,28 @@ def mobile_login():
             "username": "...",
             "password": "..."
         }
-
-    The username may also be an email address if supported by UserService.
     """
-    data = request.get_json(silent=True) or {}
+    data = _request_json()
 
-    username = str(data.get("username", "")).strip()
+    username, error = _required_string(
+        data,
+        "username",
+        "Username is required",
+    )
+
+    if error:
+        return error
+
     password = data.get("password", "")
 
-    if not username:
-        return jsonify(
-            {
-                "success": False,
-                "error": "Username is required",
-            }
-        ), 400
-
-    if not password:
-        return jsonify(
-            {
-                "success": False,
-                "error": "Password is required",
-            }
-        ), 400
+    if not isinstance(password, str) or not password:
+        return _error_response(
+            "Password is required",
+            400,
+        )
 
     try:
-        from services.user_service import UserService
-
-        user_service = UserService()
+        user_service = _get_user_service()
 
         user = user_service.authenticate(
             username=username,
@@ -404,38 +622,26 @@ def mobile_login():
         )
 
         if not user:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Invalid username or password",
-                }
-            ), 401
+            return _error_response(
+                "Invalid username or password",
+                401,
+            )
 
         if not user.is_active:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "User account is inactive",
-                }
-            ), 403
+            return _error_response(
+                "User account is inactive",
+                403,
+            )
 
         token = _create_access_token(user)
 
-        return jsonify(
+        return _success_response(
             {
-                "success": True,
                 "message": "Login successful",
                 "token": token,
-                "user": {
-                    "id": str(user.id),
-                    "username": user.username,
-                    "email": user.email,
-                    "role": user.role,
-                    "is_active": user.is_active,
-                    "is_verified": user.is_verified,
-                },
+                "user": _serialize_user(user),
             }
-        ), 200
+        )
 
     except Exception as exc:
         current_app.logger.error(
@@ -443,12 +649,10 @@ def mobile_login():
             exc,
         )
 
-        return jsonify(
-            {
-                "success": False,
-                "error": "Authentication failed",
-            }
-        ), 401
+        return _error_response(
+            "Authentication failed",
+            401,
+        )
 
 
 @mobile_bp.get("/auth/me")
@@ -459,20 +663,14 @@ def mobile_me():
     """
     user = request.mobile_user
 
-    return jsonify(
+    return _success_response(
         {
-            "success": True,
-            "user": {
-                "id": str(user.id),
-                "username": user.username,
-                "email": user.email,
-                "role": user.role,
-                "default_network": user.default_network,
-                "is_active": user.is_active,
-                "is_verified": user.is_verified,
-            },
+            "user": _serialize_user(
+                user,
+                include_network=True,
+            ),
         }
-    ), 200
+    )
 
 
 @mobile_bp.post("/auth/logout")
@@ -481,17 +679,14 @@ def mobile_logout():
     """
     Mobile logout endpoint.
 
-    The current token is stateless, so logout is primarily a client-side
-    operation: the mobile application must remove its stored token.
-
-    A future server-side token revocation mechanism can be added if required.
+    Mobile access tokens are currently stateless. The client removes its
+    stored token after receiving this response.
     """
-    return jsonify(
+    return _success_response(
         {
-            "success": True,
             "message": "Logout successful",
         }
-    ), 200
+    )
 
 
 # =============================================================================
@@ -503,131 +698,179 @@ def mobile_logout():
 def mobile_dashboard_stats():
     """
     Return dashboard statistics for the authenticated user.
-
-    Returns:
-        {
-            "success": True,
-            "data": {
-                "total_wallets": 0,
-                "total_transactions": 0,
-                "by_blockchain": {
-                    "ethereum": {"wallets": 0, "transactions": 0},
-                    "bitcoin": {"wallets": 0, "transactions": 0},
-                    "tron": {"wallets": 0, "transactions": 0}
-                },
-                "recent_activity": [
-                    {
-                        "type": "wallet_created" | "transaction",
-                        "blockchain": "ethereum",
-                        "address": "...",
-                        "amount": null,
-                        "created_at": "..."
-                    }
-                ]
-            }
-        }
     """
     try:
         user = request.mobile_user
 
         from database.database import get_db_manager
-        from database.models import Wallet, UserTransaction, WalletInspection
+        from database.models import (
+            UserTransaction,
+            Wallet,
+            WalletInspection,
+        )
+        from uuid import UUID
 
-        # Get all user wallets from the database
         db = get_db_manager()
+
         with db.get_session() as session:
-            # Count wallets by blockchain
-            wallets = session.query(Wallet).filter(
-                Wallet.user_id == user.id,
-                Wallet.is_active == True
-            ).all()
+            wallets = (
+                session.query(Wallet)
+                .filter(
+                    Wallet.user_id == user.id,
+                    Wallet.is_active == True,
+                )
+                .all()
+            )
 
             total_wallets = len(wallets)
 
-            # Initialize blockchain counts
             blockchain_stats = {
-                "ethereum": {"wallets": 0, "transactions": 0},
-                "bitcoin": {"wallets": 0, "transactions": 0},
-                "tron": {"wallets": 0, "transactions": 0},
+                blockchain: {
+                    "wallets": 0,
+                    "transactions": 0,
+                }
+                for blockchain in SUPPORTED_BLOCKCHAINS
             }
 
-            # Get wallet IDs for transaction count
-            wallet_ids = [str(w.id) for w in wallets]
+            wallet_ids = [
+                str(wallet.id)
+                for wallet in wallets
+            ]
 
             for wallet in wallets:
-                blockchain = wallet.blockchain.lower()
+                blockchain = (
+                    str(wallet.blockchain)
+                    .lower()
+                )
+
                 if blockchain in blockchain_stats:
-                    blockchain_stats[blockchain]["wallets"] += 1
+                    blockchain_stats[
+                        blockchain
+                    ]["wallets"] += 1
 
-            # Count user transactions by blockchain
+            transactions = []
+
             if wallet_ids:
-                from uuid import UUID
-                wallet_uuids = [UUID(wid) for wid in wallet_ids]
+                wallet_uuids = [
+                    UUID(wallet_id)
+                    for wallet_id in wallet_ids
+                ]
 
-                transactions = session.query(UserTransaction).filter(
-                    UserTransaction.wallet_id.in_(wallet_uuids)
-                ).all()
+                transactions = (
+                    session.query(UserTransaction)
+                    .filter(
+                        UserTransaction.wallet_id.in_(
+                            wallet_uuids
+                        )
+                    )
+                    .all()
+                )
 
-                total_transactions = len(transactions)
+            total_transactions = len(
+                transactions
+            )
 
-                for tx in transactions:
-                    blockchain = tx.blockchain.lower()
-                    if blockchain in blockchain_stats:
-                        blockchain_stats[blockchain]["transactions"] += 1
-            else:
-                total_transactions = 0
+            for transaction in transactions:
+                blockchain = (
+                    str(transaction.blockchain)
+                    .lower()
+                )
 
-            # Get recent activity (last 10 events)
+                if blockchain in blockchain_stats:
+                    blockchain_stats[
+                        blockchain
+                    ]["transactions"] += 1
+
             recent_activity = []
 
-            # Get recent wallet inspections
-            wallet_addresses = [w.address for w in wallets]
+            wallet_addresses = [
+                wallet.address
+                for wallet in wallets
+            ]
+
             if wallet_addresses:
-                inspections = session.query(WalletInspection).filter(
-                    WalletInspection.address.in_(wallet_addresses)
-                ).order_by(
-                    WalletInspection.created_at.desc()
-                ).limit(5).all()
+                inspections = (
+                    session.query(WalletInspection)
+                    .filter(
+                        WalletInspection.address.in_(
+                            wallet_addresses
+                        )
+                    )
+                    .order_by(
+                        WalletInspection.created_at.desc()
+                    )
+                    .limit(5)
+                    .all()
+                )
 
-                for insp in inspections:
-                    recent_activity.append({
-                        "type": "wallet_inspection",
-                        "blockchain": insp.blockchain,
-                        "address": insp.address,
-                        "amount": None,
-                        "created_at": insp.created_at.isoformat() if insp.created_at else None,
-                    })
+                for inspection in inspections:
+                    recent_activity.append(
+                        {
+                            "type": "wallet_inspection",
+                            "blockchain": inspection.blockchain,
+                            "address": inspection.address,
+                            "amount": None,
+                            "created_at": (
+                                inspection.created_at.isoformat()
+                                if inspection.created_at
+                                else None
+                            ),
+                        }
+                    )
 
-            # Get recent transactions
             if wallet_ids:
-                wallet_uuids = [UUID(wid) for wid in wallet_ids]
-                recent_txs = session.query(UserTransaction).filter(
-                    UserTransaction.wallet_id.in_(wallet_uuids)
-                ).order_by(
-                    UserTransaction.created_at.desc()
-                ).limit(5).all()
+                wallet_uuids = [
+                    UUID(wallet_id)
+                    for wallet_id in wallet_ids
+                ]
 
-                for tx in recent_txs:
-                    recent_activity.append({
-                        "type": "transaction",
-                        "blockchain": tx.blockchain,
-                        "address": tx.to_address,
-                        "amount": float(tx.amount) if tx.amount else None,
-                        "asset": tx.asset,
-                        "status": tx.status,
-                        "created_at": tx.created_at.isoformat() if tx.created_at else None,
-                    })
+                recent_transactions = (
+                    session.query(UserTransaction)
+                    .filter(
+                        UserTransaction.wallet_id.in_(
+                            wallet_uuids
+                        )
+                    )
+                    .order_by(
+                        UserTransaction.created_at.desc()
+                    )
+                    .limit(5)
+                    .all()
+                )
 
-            # Sort by created_at (most recent first) and limit to 10
+                for transaction in recent_transactions:
+                    recent_activity.append(
+                        {
+                            "type": "transaction",
+                            "blockchain": transaction.blockchain,
+                            "address": transaction.to_address,
+                            "amount": (
+                                float(transaction.amount)
+                                if transaction.amount
+                                else None
+                            ),
+                            "asset": transaction.asset,
+                            "status": transaction.status,
+                            "created_at": (
+                                transaction.created_at.isoformat()
+                                if transaction.created_at
+                                else None
+                            ),
+                        }
+                    )
+
             recent_activity.sort(
-                key=lambda x: x.get("created_at", ""),
-                reverse=True
+                key=lambda item: (
+                    item.get("created_at")
+                    or ""
+                ),
+                reverse=True,
             )
+
             recent_activity = recent_activity[:10]
 
-        return jsonify(
+        return _success_response(
             {
-                "success": True,
                 "data": {
                     "total_wallets": total_wallets,
                     "total_transactions": total_transactions,
@@ -635,19 +878,18 @@ def mobile_dashboard_stats():
                     "recent_activity": recent_activity,
                 },
             }
-        ), 200
+        )
 
     except Exception as exc:
         current_app.logger.error(
             "Mobile dashboard error: %s",
             exc,
         )
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+        return _error_response(
+            str(exc),
+            500,
+        )
 
 
 # =============================================================================
@@ -659,54 +901,38 @@ def mobile_dashboard_stats():
 def mobile_create_wallet():
     """
     Create a new wallet for the authenticated user.
-
-    Expected JSON:
-        {
-            "blockchain": "ethereum" | "bitcoin" | "tron",
-            "label": "My ETH Wallet"
-        }
-
-    Returns:
-        {
-            "success": True,
-            "wallet": {
-                "id": "uuid",
-                "wallet_id": "eth_123abc",
-                "address": "0x...",
-                "blockchain": "ethereum",
-                "network": "mainnet",
-                "label": "My ETH Wallet",
-                "created_at": "2026-01-01T00:00:00"
-            }
-        }
     """
     try:
         user = request.mobile_user
-        data = request.get_json(silent=True) or {}
+        data = _request_json()
 
-        blockchain = str(data.get("blockchain", "")).strip().lower()
-        label = str(data.get("label", "")).strip()
+        blockchain, error = _required_string(
+            data,
+            "blockchain",
+            "Blockchain is required",
+            lowercase=True,
+        )
 
-        if not blockchain:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Blockchain is required",
-                }
-            ), 400
+        if error:
+            return error
 
         if blockchain not in SUPPORTED_BLOCKCHAINS:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Blockchain must be ethereum, bitcoin, or tron",
-                }
-            ), 400
+            return _error_response(
+                "Blockchain must be ethereum, bitcoin, or tron",
+                400,
+            )
+
+        label = str(
+            data.get("label", "")
+        ).strip()
 
         if not label:
-            label = f"{blockchain.capitalize()} Wallet"
+            label = (
+                f"{blockchain.capitalize()} Wallet"
+            )
 
         wallet_service = _get_wallet_service()
+
         wallet = wallet_service.create_wallet(
             user_id=user.id,
             blockchain=blockchain,
@@ -714,39 +940,51 @@ def mobile_create_wallet():
         )
 
         if not wallet:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Failed to create wallet",
-                }
-            ), 500
+            return _error_response(
+                "Failed to create wallet",
+                500,
+            )
 
-        return jsonify(
+        return _success_response(
             {
-                "success": True,
                 "wallet": {
-                    "id": str(wallet.get("id")),
-                    "wallet_id": wallet.get("wallet_id"),
-                    "address": wallet.get("address"),
-                    "blockchain": wallet.get("blockchain"),
-                    "network": wallet.get("network", "mainnet"),
-                    "label": wallet.get("label"),
-                    "created_at": wallet.get("created_at"),
+                    "id": str(
+                        wallet.get("id")
+                    ),
+                    "wallet_id": wallet.get(
+                        "wallet_id"
+                    ),
+                    "address": wallet.get(
+                        "address"
+                    ),
+                    "blockchain": wallet.get(
+                        "blockchain"
+                    ),
+                    "network": wallet.get(
+                        "network",
+                        "mainnet",
+                    ),
+                    "label": wallet.get(
+                        "label"
+                    ),
+                    "created_at": wallet.get(
+                        "created_at"
+                    ),
                 },
-            }
-        ), 201
+            },
+            201,
+        )
 
     except Exception as exc:
         current_app.logger.error(
             "Mobile wallet creation error: %s",
             exc,
         )
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+        return _error_response(
+            str(exc),
+            500,
+        )
 
 
 @mobile_bp.get("/wallets")
@@ -754,105 +992,80 @@ def mobile_create_wallet():
 def mobile_list_wallets():
     """
     List all wallets for the authenticated user.
-
-    Returns:
-        {
-            "success": True,
-            "wallets": [
-                {
-                    "id": "uuid",
-                    "wallet_id": "eth_123abc",
-                    "address": "0x...",
-                    "blockchain": "ethereum",
-                    "network": "mainnet",
-                    "label": "My ETH Wallet",
-                    "created_at": "2026-01-01T00:00:00"
-                }
-            ]
-        }
     """
     try:
         user = request.mobile_user
-
         wallet_service = _get_wallet_service()
-        wallets = wallet_service.get_user_wallets(user.id)
 
-        return jsonify(
+        wallets = wallet_service.get_user_wallets(
+            user.id
+        )
+
+        return _success_response(
             {
-                "success": True,
                 "wallets": wallets,
             }
-        ), 200
+        )
 
     except Exception as exc:
         current_app.logger.error(
             "Mobile list wallets error: %s",
             exc,
         )
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+        return _error_response(
+            str(exc),
+            500,
+        )
 
 
 @mobile_bp.get("/wallets/<wallet_id>/balance")
 @mobile_auth_required
-def mobile_get_wallet_balance(wallet_id: str):
+def mobile_get_wallet_balance(
+    wallet_id: str,
+):
     """
     Get the balance for a specific wallet.
-
-    Returns:
-        {
-            "success": True,
-            "balance": {
-                "balance": 1.5,
-                "symbol": "ETH",
-                "address": "0x...",
-                "decimals": 18
-            }
-        }
     """
     try:
         user = request.mobile_user
-
         wallet_service = _get_wallet_service()
 
-        # Verify wallet belongs to the authenticated user.
-        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
+        wallet, error = _require_owned_wallet(
+            wallet_service,
+            user.id,
+            wallet_id,
+        )
 
-        if not wallet:
-            return _error_response("Wallet not found or access denied", 404)
+        if error:
+            return error
 
-        balance = wallet_service.get_wallet_balance(wallet_id)
+        balance = wallet_service.get_wallet_balance(
+            wallet_id
+        )
 
         if "error" in balance:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": balance["error"],
-                }
-            ), 400
+            return _error_response(
+                balance["error"],
+                400,
+            )
 
-        return jsonify(
+        return _success_response(
             {
-                "success": True,
                 "balance": balance,
             }
-        ), 200
+        )
 
     except Exception as exc:
         current_app.logger.error(
             "Mobile get balance error: %s",
             exc,
         )
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+        return _error_response(
+            str(exc),
+            500,
+        )
 
 
 # =============================================================================
@@ -861,86 +1074,72 @@ def mobile_get_wallet_balance(wallet_id: str):
 
 @mobile_bp.get("/wallets/<wallet_id>/inspect")
 @mobile_auth_required
-def mobile_inspect_wallet(wallet_id: str):
+def mobile_inspect_wallet(
+    wallet_id: str,
+):
     """
     Inspect a wallet with detailed information including token holdings.
-
-    Returns:
-        {
-            "success": True,
-            "wallet": {
-                "wallet_id": "eth_123abc",
-                "address": "0x...",
-                "blockchain": "ethereum",
-                "network": "mainnet",
-                "label": "My ETH Wallet",
-                "balance": 1.5,
-                "asset": "ETH",
-                "nonce": 0,
-                "transaction_count": 0,
-                "is_contract": false,
-                "classification": "EOA",
-                "token_balances": [
-                    {
-                        "contract_address": "0x...",
-                        "name": "USDC",
-                        "symbol": "USDC",
-                        "balance": 100.0,
-                        "decimals": 6
-                    }
-                ],
-                "last_updated": "2026-01-01T00:00:00"
-            }
-        }
     """
     try:
         user = request.mobile_user
         wallet_service = _get_wallet_service()
 
-        # Verify wallet belongs to the authenticated user.
-        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
+        wallet, error = _require_owned_wallet(
+            wallet_service,
+            user.id,
+            wallet_id,
+        )
 
-        if not wallet:
-            return _error_response("Wallet not found or access denied", 404)
+        if error:
+            return error
 
-        # Get detailed wallet report
-        report = wallet_service.get_wallet_report(wallet_id)
+        report = wallet_service.get_wallet_report(
+            wallet_id
+        )
 
         if "error" in report:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": report["error"],
-                }
-            ), 400
+            return _error_response(
+                report["error"],
+                400,
+            )
 
-        # Add wallet metadata
-        report.update({
-            "wallet_id": wallet.get("wallet_id"),
-            "label": wallet.get("label"),
-            "blockchain": wallet.get("blockchain"),
-            "network": wallet.get("network", "mainnet"),
-            "created_at": wallet.get("created_at"),
-        })
-
-        return jsonify(
+        report.update(
             {
-                "success": True,
+                "wallet_id": wallet.get(
+                    "wallet_id"
+                ),
+                "label": wallet.get(
+                    "label"
+                ),
+                "blockchain": wallet.get(
+                    "blockchain"
+                ),
+                "network": wallet.get(
+                    "network",
+                    "mainnet",
+                ),
+                "created_at": wallet.get(
+                    "created_at"
+                ),
+            }
+        )
+
+        return _success_response(
+            {
                 "wallet": report,
             }
-        ), 200
+        )
 
     except Exception as exc:
         current_app.logger.error(
             "Mobile inspect wallet error: %s",
             exc,
         )
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+        return _error_response(
+            str(exc),
+            500,
+        )
 
 
 # =============================================================================
@@ -949,120 +1148,113 @@ def mobile_inspect_wallet(wallet_id: str):
 
 @mobile_bp.post("/wallets/<wallet_id>/send")
 @mobile_auth_required
-def mobile_send_transaction(wallet_id: str):
+def mobile_send_transaction(
+    wallet_id: str,
+):
     """
     Send a transaction from a user's wallet.
-
-    Expected JSON:
-        {
-            "to_address": "0x...",
-            "amount": 0.001
-        }
-
-    Returns:
-        {
-            "success": True,
-            "transaction": {
-                "tx_hash": "0x...",
-                "from": "0x...",
-                "to": "0x...",
-                "amount": 0.001,
-                "asset": "ETH",
-                "fee": 0.0001,
-                "status": "pending"
-            }
-        }
     """
     try:
         user = request.mobile_user
-        data = request.get_json(silent=True) or {}
+        data = _request_json()
 
-        to_address = str(data.get("to_address", "")).strip()
-        amount = data.get("amount")
+        to_address, error = _required_string(
+            data,
+            "to_address",
+            "Recipient address is required",
+        )
 
-        if not to_address:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Recipient address is required",
-                }
-            ), 400
+        if error:
+            return error
 
-        if amount is None:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Amount is required",
-                }
-            ), 400
+        amount_value = data.get("amount")
+
+        if amount_value is None:
+            return _error_response(
+                "Amount is required",
+                400,
+            )
 
         try:
-            amount = float(amount)
-        except (ValueError, TypeError):
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Amount must be a valid number",
-                }
-            ), 400
+            amount = float(amount_value)
+        except (
+            ValueError,
+            TypeError,
+        ):
+            return _error_response(
+                "Amount must be a valid number",
+                400,
+            )
 
         if amount <= 0:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Amount must be greater than 0",
-                }
-            ), 400
+            return _error_response(
+                "Amount must be greater than 0",
+                400,
+            )
 
         wallet_service = _get_wallet_service()
 
-        # Verify wallet belongs to the authenticated user.
-        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
+        wallet, error = _require_owned_wallet(
+            wallet_service,
+            user.id,
+            wallet_id,
+        )
 
-        if not wallet:
-            return _error_response("Wallet not found or access denied", 404)
+        if error:
+            return error
 
-        # Send the transaction
         result = wallet_service.send_transaction(
             wallet_id=wallet_id,
             to_address=to_address,
-            amount=amount
+            amount=amount,
         )
 
         if "error" in result:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": result["error"],
-                }
-            ), 400
+            return _error_response(
+                result["error"],
+                400,
+            )
 
-        return jsonify(
+        return _success_response(
             {
-                "success": True,
                 "transaction": {
-                    "tx_hash": result.get("tx_hash"),
-                    "from": result.get("from"),
-                    "to": result.get("to"),
-                    "amount": result.get("amount"),
-                    "asset": result.get("asset", "ETH"),
-                    "fee": result.get("fee"),
-                    "status": result.get("status", "pending"),
+                    "tx_hash": result.get(
+                        "tx_hash"
+                    ),
+                    "from": result.get(
+                        "from"
+                    ),
+                    "to": result.get(
+                        "to"
+                    ),
+                    "amount": result.get(
+                        "amount"
+                    ),
+                    "asset": result.get(
+                        "asset",
+                        "ETH",
+                    ),
+                    "fee": result.get(
+                        "fee"
+                    ),
+                    "status": result.get(
+                        "status",
+                        "pending",
+                    ),
                 },
             }
-        ), 200
+        )
 
     except Exception as exc:
         current_app.logger.error(
             "Mobile send transaction error: %s",
             exc,
         )
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+        return _error_response(
+            str(exc),
+            500,
+        )
 
 
 # =============================================================================
@@ -1071,71 +1263,85 @@ def mobile_send_transaction(wallet_id: str):
 
 @mobile_bp.get("/wallets/<wallet_id>/transactions")
 @mobile_auth_required
-def mobile_get_transactions(wallet_id: str):
+def mobile_get_transactions(
+    wallet_id: str,
+):
     """
     Get transaction history for a wallet.
-
-    Query Parameters:
-        limit: int (default: 20)
-        offset: int (default: 0)
-
-    Returns:
-        {
-            "success": True,
-            "transactions": [...],
-            "total": 0,
-            "limit": 20,
-            "offset": 0,
-            "total_pages": 1
-        }
     """
     try:
         user = request.mobile_user
-        limit, offset, pagination_error = _parse_pagination()
+
+        limit, offset, pagination_error = (
+            _parse_pagination()
+        )
 
         if pagination_error:
-            return _error_response(pagination_error, 400)
+            return _error_response(
+                pagination_error,
+                400,
+            )
 
         wallet_service = _get_wallet_service()
 
-        # Verify wallet belongs to the authenticated user.
-        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
+        wallet, error = _require_owned_wallet(
+            wallet_service,
+            user.id,
+            wallet_id,
+        )
 
-        if not wallet:
-            return _error_response("Wallet not found or access denied", 404)
+        if error:
+            return error
 
-        result = wallet_service.get_transaction_history(wallet_id, limit, offset)
+        result = (
+            wallet_service.get_transaction_history(
+                wallet_id,
+                limit,
+                offset,
+            )
+        )
 
         if "error" in result:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": result["error"],
-                }
-            ), 400
+            return _error_response(
+                result["error"],
+                400,
+            )
 
-        return jsonify(
+        return _success_response(
             {
-                "success": True,
-                "transactions": result.get("transactions", []),
-                "total": result.get("total", 0),
-                "limit": result.get("limit", limit),
-                "offset": result.get("offset", offset),
-                "total_pages": result.get("total_pages", 1),
+                "transactions": result.get(
+                    "transactions",
+                    [],
+                ),
+                "total": result.get(
+                    "total",
+                    0,
+                ),
+                "limit": result.get(
+                    "limit",
+                    limit,
+                ),
+                "offset": result.get(
+                    "offset",
+                    offset,
+                ),
+                "total_pages": result.get(
+                    "total_pages",
+                    1,
+                ),
             }
-        ), 200
+        )
 
     except Exception as exc:
         current_app.logger.error(
             "Mobile get transactions error: %s",
             exc,
         )
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+        return _error_response(
+            str(exc),
+            500,
+        )
 
 
 # =============================================================================
@@ -1144,71 +1350,64 @@ def mobile_get_transactions(wallet_id: str):
 
 @mobile_bp.get("/wallets/<wallet_id>/tokens")
 @mobile_auth_required
-def mobile_get_tokens(wallet_id: str):
+def mobile_get_tokens(
+    wallet_id: str,
+):
     """
     Get token holdings for a wallet.
-
-    Returns:
-        {
-            "success": True,
-            "tokens": [
-                {
-                    "contract_address": "0x...",
-                    "name": "USDC",
-                    "symbol": "USDC",
-                    "decimals": 6,
-                    "balance": 100.0,
-                    "balance_formatted": 100.0,
-                    "logo_url": "..."
-                }
-            ],
-            "blockchain": "ethereum",
-            "address": "0x...",
-            "total_tokens": 1
-        }
     """
     try:
         user = request.mobile_user
-
         wallet_service = _get_wallet_service()
 
-        # Verify wallet belongs to the authenticated user.
-        wallet = _get_owned_wallet(wallet_service, user.id, wallet_id)
+        wallet, error = _require_owned_wallet(
+            wallet_service,
+            user.id,
+            wallet_id,
+        )
 
-        if not wallet:
-            return _error_response("Wallet not found or access denied", 404)
+        if error:
+            return error
 
-        result = wallet_service.get_token_holdings(wallet_id)
+        result = wallet_service.get_token_holdings(
+            wallet_id
+        )
 
         if "error" in result:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": result["error"],
-                }
-            ), 400
+            return _error_response(
+                result["error"],
+                400,
+            )
 
-        return jsonify(
+        return _success_response(
             {
-                "success": True,
-                "tokens": result.get("tokens", []),
-                "blockchain": result.get("blockchain"),
-                "address": result.get("address"),
-                "total_tokens": result.get("total_tokens", 0),
+                "tokens": result.get(
+                    "tokens",
+                    [],
+                ),
+                "blockchain": result.get(
+                    "blockchain"
+                ),
+                "address": result.get(
+                    "address"
+                ),
+                "total_tokens": result.get(
+                    "total_tokens",
+                    0,
+                ),
             }
-        ), 200
+        )
 
     except Exception as exc:
         current_app.logger.error(
             "Mobile get tokens error: %s",
             exc,
         )
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+        return _error_response(
+            str(exc),
+            500,
+        )
 
 
 # =============================================================================
