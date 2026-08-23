@@ -218,7 +218,6 @@ class AlchemyProvider(BaseProvider):
         if self._http_url is None:
 
             api_key = self._api_key if self._api_key else os.getenv("ALCHEMY_API_KEY", "")
-
             self._http_url = (
                 f"https://"
                 f"{self._alchemy_network}"

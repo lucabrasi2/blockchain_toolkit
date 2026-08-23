@@ -25,6 +25,7 @@ Version
 """
 
 from datetime import datetime
+import logging
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime,
     Text, BigInteger, DECIMAL, Index, JSON, ForeignKey
@@ -37,6 +38,8 @@ import uuid
 
 # Reuse the same Base from existing models
 from database.models import Base
+
+logger = logging.getLogger(__name__)
 
 
 class User(Base):

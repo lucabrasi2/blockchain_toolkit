@@ -1,20 +1,37 @@
 """
+===============================================================================
 Universal Blockchain Platform (UBP)
 
-Version : 0.9.0
-Module  : Network Controller
-Author  : jaramogi Diddy
+Version
+-------
+0.9.0
 
+Module
+------
+Network Controller
+
+Author
+------
+Jaramogi Diddy
+
+Purpose
+-------
 Handles Ethereum network information requests.
+
+Architectural Intent
+--------------------
+The controller coordinates user interaction and delegates network operations
+to NetworkService. It contains no blockchain access logic.
+===============================================================================
 """
+
+from __future__ import annotations
 
 from core.logger import get_logger
 
+from exceptions.blockchain_exceptions import UBPException
 from services.ethereum.network_service import NetworkService
 
-from exceptions.blockchain_exceptions import (
-    UBPException,
-)
 
 logger = get_logger(__name__)
 
@@ -24,45 +41,121 @@ class NetworkController:
     Controller for Ethereum network operations.
     """
 
-    def __init__(self):
-        """
-        Initialize the controller.
-        """
+    def __init__(self) -> None:
+        """Initialize the Network Controller."""
 
         self.network_service = NetworkService()
 
-        logger.info("NetworkController initialized.")
+        logger.info(
+            "NetworkController initialized."
+        )
 
-    def network_information(self):
+    # =========================================================================
+    # Network Information
+    # =========================================================================
+
+    def network_information(self) -> None:
         """
         Display Ethereum network information.
+
+        Network data is retrieved through NetworkService and formatted for
+        interactive terminal presentation.
         """
 
-        logger.info("Displaying network information.")
+        logger.info(
+            "Displaying network information."
+        )
 
         try:
-
             report = self.network_service.get_network_report()
 
-            print("\n========== ETHEREUM NETWORK ==========\n")
+            self._display_network_report(
+                report,
+            )
 
-            print(f"Connected      : {report['connected']}")
-            print(f"Chain ID       : {report['chain_id']}")
-            print(f"Latest Block   : {report['latest_block']}")
-            print(f"Gas Price      : {report['gas_price_gwei']:.2f} Gwei")
-            print(f"Client Version : {report['client_version']}")
-
-            logger.info("Network information displayed.")
+            logger.info(
+                "Network information displayed."
+            )
 
         except UBPException as error:
+            logger.error(
+                str(error),
+            )
 
-            logger.error(str(error))
-            print(f"\n❌ {error}")
+            print(
+                f"\n❌ {error}",
+            )
 
         except Exception as error:
+            logger.exception(
+                "Unexpected network error."
+            )
 
-            logger.exception("Unexpected network error.")
-            print(f"\nUnexpected Error: {error}")
+            print(
+                f"\nUnexpected Error: {error}",
+            )
 
-        input("\nPress Enter to continue...")
-        
+        finally:
+            input(
+                "\nPress Enter to continue..."
+            )
+
+    # =========================================================================
+    # Presentation
+    # =========================================================================
+
+    @staticmethod
+    def _display_network_report(
+        report: dict,
+    ) -> None:
+        """
+        Display the Ethereum network report.
+
+        Parameters
+        ----------
+        report:
+            Network report returned by NetworkService.
+        """
+
+        print(
+            "\n========== ETHEREUM NETWORK ==========\n"
+        )
+
+        print(
+            f"Connected      : "
+            f"{report['connected']}"
+        )
+
+        print(
+            f"Chain ID       : "
+            f"{report['chain_id']}"
+        )
+
+        print(
+            f"Latest Block   : "
+            f"{report['latest_block']}"
+        )
+
+        print(
+            f"Gas Price      : "
+            f"{report['gas_price_gwei']:.2f} Gwei"
+        )
+
+        print(
+            f"Client Version : "
+            f"{report['client_version']}"
+        )
+
+
+# =============================================================================
+# Public Exports
+# =============================================================================
+
+__all__ = [
+    "NetworkController",
+]
+
+
+# =============================================================================
+# End of File
+# =============================================================================

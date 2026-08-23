@@ -30,7 +30,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 // UBP Mobile API Configuration
 // ============================================================================
 
-const MOBILE_API_URL = 'http://localhost:5000/api/mobile';
+const MOBILE_API_URL = 'http://172.20.189.103:5000/api/mobile';
 
 // ============================================================================
 // Storage Keys
@@ -454,13 +454,49 @@ const RegisterScreen = ({
         );
       }
 
+      // ============================================================
+      // FIX 1: Auto-login after successful registration
+      // ============================================================
+      const loginResponse = await fetch(
+        `${MOBILE_API_URL}/auth/login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: username.trim(),
+            password,
+          }),
+        }
+      );
+
+      const loginData = await parseResponse(loginResponse);
+
+      if (!loginResponse.ok || !loginData.success) {
+        throw new Error('Auto-login failed. Please sign in manually.');
+      }
+
+      if (!loginData.token) {
+        throw new Error('No authentication token received.');
+      }
+
+      await storeAuthentication(loginData.token, loginData.user);
+      
       Alert.alert(
-        'Account Created',
-        'Your account has been created successfully. Please sign in.',
+        '✅ Account Created',
+        'Your account has been created and you are now signed in.',
         [
           {
             text: 'OK',
-            onPress: onRegisterSuccess,
+            onPress: () => {
+              // Clear form fields
+              setUsername('');
+              setEmail('');
+              setPassword('');
+              setConfirmPassword('');
+              onRegisterSuccess();
+            },
           },
         ]
       );
@@ -672,6 +708,9 @@ const CreateWalletModal = ({
             Blockchain
           </Text>
 
+          {/* ================================================================
+              FIX 2: Added TRON button
+              ============================================================ */}
           <View style={styles.blockchainRow}>
 
             <TouchableOpacity
@@ -691,7 +730,7 @@ const CreateWalletModal = ({
                     styles.blockchainButtonTextActive,
                 ]}
               >
-                Ethereum
+                🟣 Ethereum
               </Text>
             </TouchableOpacity>
 
@@ -712,7 +751,28 @@ const CreateWalletModal = ({
                     styles.blockchainButtonTextActive,
                 ]}
               >
-                Bitcoin
+                🟠 Bitcoin
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.blockchainButton,
+                blockchain === 'tron' &&
+                  styles.blockchainButtonActive,
+              ]}
+              onPress={() =>
+                setBlockchain('tron')
+              }
+            >
+              <Text
+                style={[
+                  styles.blockchainButtonText,
+                  blockchain === 'tron' &&
+                    styles.blockchainButtonTextActive,
+                ]}
+              >
+                🔴 TRON
               </Text>
             </TouchableOpacity>
 
@@ -1622,7 +1682,7 @@ const WalletInspectionModal = ({
                       Token Holdings
                     </Text>
 
-                    {(
+                    {( 
                       inspection.token_balances ||
                       inspection.tokens ||
                       []
@@ -1903,7 +1963,6 @@ const TransactionHistoryModal = ({
             )}
 
         </View>
-
       </View>
     </Modal>
   );
@@ -2541,6 +2600,10 @@ const App = () => {
         try {
           const storedToken =
             await getAuthToken();
+            console.log(
+           'RESTORE STORED TOKEN:',
+            storedToken
+        );
 
           const storedUser =
             await getStoredUser();
@@ -2704,14 +2767,27 @@ const App = () => {
     setScreen('login');
   };
 
-  // --------------------------------------------------------------------------
-  // Registration
-  // --------------------------------------------------------------------------
-
-  const handleRegistrationSuccess =
-    () => {
-      setScreen('login');
+  // ============================================================
+  // FIX 3: Registration Success Handler - Proper session restore
+  // ============================================================
+  const handleRegistrationSuccess = () => {
+    // The user is already logged in via auto-login, so go to dashboard
+    // Reload the user state from storage
+    const restoreAfterRegister = async () => {
+      const storedToken = await getAuthToken();
+      const storedUser = await getStoredUser();
+      
+      if (storedToken && storedUser) {
+        setToken(storedToken);
+        setUser(storedUser);
+        setScreen('dashboard');
+      } else {
+        setScreen('login');
+      }
     };
+    
+    restoreAfterRegister();
+  };
 
   // --------------------------------------------------------------------------
   // Navigation
