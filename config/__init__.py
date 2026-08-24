@@ -11,7 +11,7 @@ Version
 """
 
 
-from config.settings import (
+from .settings import (
     Settings,
     settings,
 )
