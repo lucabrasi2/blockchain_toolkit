@@ -24,6 +24,8 @@ Version
 ===============================================================================
 """
 
+import base64
+import os
 import uuid
 import secrets
 import hashlib
@@ -52,11 +54,11 @@ class WalletService:
         try:
             from providers import get_provider
             self.eth_provider = get_provider("alchemy")
-        except:
+        except Exception:
             try:
                 from providers import get_provider
                 self.eth_provider = get_provider("public")
-            except:
+            except Exception:
                 self.eth_provider = None
                 logger.warning("Ethereum provider not available")
 
@@ -153,9 +155,124 @@ class WalletService:
             logger.error(f"Error deriving address: {e}")
             return None
 
-    def _get_encryption_key(self, user_id: str) -> str:
-        """Get encryption key for a user."""
-        return f"user_{user_id}_encryption_key"
+    # ------------------------------------------------------------------
+    # Secret/key protection
+    # ------------------------------------------------------------------
+
+    def _get_encryption_key(self) -> bytes:
+        """
+        Return the application-level wallet encryption key.
+
+        Wallet private keys and recovery phrases must never be encrypted
+        with a predictable value derived from the user's UUID. A stable
+        deployment secret is therefore required. The value may be either a
+        Fernet key or any sufficiently random deployment secret; non-Fernet
+        secrets are deterministically converted into a Fernet key.
+        """
+        secret = os.getenv("UBP_WALLET_ENCRYPTION_KEY")
+        if not secret:
+            raise RuntimeError(
+                "UBP_WALLET_ENCRYPTION_KEY is not configured; "
+                "refusing to create or decrypt wallet secrets."
+            )
+
+        try:
+            from cryptography.fernet import Fernet
+            # Accept a normal Fernet key directly.
+            Fernet(secret.encode())
+            return secret.encode()
+        except Exception:
+            # Convert a deployment secret into a valid Fernet key.
+            digest = hashlib.sha256(secret.encode("utf-8")).digest()
+            return base64.urlsafe_b64encode(digest)
+
+    def _encrypt_secret(self, value: str) -> str:
+        """Encrypt sensitive wallet material before database storage."""
+        from cryptography.fernet import Fernet
+
+        encrypted = Fernet(self._get_encryption_key()).encrypt(
+            value.encode("utf-8")
+        )
+        return "fernet:" + encrypted.decode("ascii")
+
+    def _decrypt_secret(self, value: Optional[str]) -> Optional[str]:
+        """
+        Decrypt wallet material.
+
+        Legacy plaintext/hex storage is deliberately rejected by default.
+        Existing deployments can temporarily opt into legacy reads while a
+        migration is performed by setting UBP_ALLOW_LEGACY_PLAINTEXT_KEYS=1.
+        """
+        if not value:
+            return None
+
+        if value.startswith("fernet:"):
+            from cryptography.fernet import Fernet, InvalidToken
+
+            try:
+                return Fernet(self._get_encryption_key()).decrypt(
+                    value[7:].encode("ascii")
+                ).decode("utf-8")
+            except InvalidToken as exc:
+                raise RuntimeError("Wallet secret could not be decrypted") from exc
+
+        if os.getenv("UBP_ALLOW_LEGACY_PLAINTEXT_KEYS", "0") == "1":
+            logger.warning(
+                "Legacy plaintext wallet secret encountered; migrate this wallet immediately."
+            )
+            return value
+
+        raise RuntimeError(
+            "Legacy unencrypted wallet secret rejected. "
+            "Migrate the wallet before signing transactions."
+        )
+
+    # ------------------------------------------------------------------
+    # Validation / authorization helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_user_id(user_id: uuid.UUID) -> uuid.UUID:
+        """Normalize and validate a user identifier."""
+        if isinstance(user_id, uuid.UUID):
+            return user_id
+        if isinstance(user_id, str):
+            return uuid.UUID(user_id)
+        raise ValueError("Invalid user ID")
+
+    @staticmethod
+    def _validate_blockchain(blockchain: str) -> str:
+        """Normalize a supported blockchain identifier."""
+        value = str(blockchain or "").strip().lower()
+        if value not in {"ethereum", "bitcoin", "tron"}:
+            raise ValueError("Unsupported blockchain")
+        return value
+
+    @staticmethod
+    def _validate_amount(amount: Any) -> float:
+        """Validate monetary input without relying on binary float checks."""
+        try:
+            value = Decimal(str(amount))
+        except Exception as exc:
+            raise ValueError("Invalid transaction amount") from exc
+
+        if not value.is_finite() or value <= 0:
+            raise ValueError("Transaction amount must be greater than zero")
+
+        return float(value)
+
+    def _wallet_for_user_or_error(
+        self,
+        wallet_id: str,
+        user_id: uuid.UUID,
+    ) -> Dict[str, Any]:
+        """Resolve a wallet only inside the authenticated user's boundary."""
+        wallet = self.get_owned_wallet(wallet_id, user_id)
+        if not wallet:
+            # Do not distinguish non-existent wallets from another user's
+            # wallet. This prevents simple wallet-ID enumeration.
+            raise PermissionError("Wallet not found or access denied")
+        return wallet
 
     def create_wallet(self, user_id: uuid.UUID, blockchain: str, label: str = None) -> Optional[Dict[str, Any]]:
         """
@@ -176,6 +293,9 @@ class WalletService:
             Wallet information or None if failed.
         """
         try:
+            user_id = self._normalize_user_id(user_id)
+            blockchain = self._validate_blockchain(blockchain)
+
             # Generate seed phrase
             mnemonic = self.generate_seed_phrase()
 
@@ -221,9 +341,9 @@ class WalletService:
                     blockchain=blockchain,
                     network="mainnet",
                     address=address,
-                    public_key=private_key.hex()[:64],  # Simplified
-                    encrypted_private_key=private_key.hex(),  # In production, encrypt this
-                    encrypted_seed=mnemonic,  # In production, encrypt this
+                    public_key=private_key.hex()[:64],  # Preserved legacy field contract
+                    encrypted_private_key=self._encrypt_secret(private_key.hex()),
+                    encrypted_seed=self._encrypt_secret(mnemonic),
                     wallet_type="hd",
                     custody_type="non_custodial",
                     is_active=True,
@@ -248,9 +368,8 @@ class WalletService:
         """Get all wallets for a user."""
         try:
             with self.db.get_session() as session:
-                if isinstance(user_id, str):
-                    user_id = uuid.UUID(user_id)
-                    
+                user_id = self._normalize_user_id(user_id)
+
                 wallets = session.query(Wallet).filter(
                     Wallet.user_id == user_id,
                     Wallet.is_active == True
@@ -268,7 +387,10 @@ class WalletService:
             return []
 
     def get_wallet_by_id(self, wallet_id: str) -> Optional[Dict[str, Any]]:
-        """Get wallet by wallet_id."""
+        """Get a wallet by ID for trusted/internal callers.
+
+        User-facing code must use get_owned_wallet()/require_owned_wallet().
+        """
         try:
             with self.db.get_session() as session:
                 wallet = session.query(Wallet).filter(
@@ -285,6 +407,99 @@ class WalletService:
         except Exception as e:
             logger.error(f"Error getting wallet: {e}")
             return None
+
+    def get_owned_wallet(
+        self,
+        wallet_id: str,
+        user_id: uuid.UUID,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve an active wallet only when it belongs to the specified user.
+
+        This method is the service-layer authorization boundary for
+        user-owned wallet operations.
+        """
+        try:
+            if not wallet_id:
+                return None
+
+            user_id = self._normalize_user_id(user_id)
+
+            with self.db.get_session() as session:
+                wallet = (
+                    session.query(Wallet)
+                    .filter(
+                        Wallet.wallet_id == wallet_id,
+                        Wallet.user_id == user_id,
+                        Wallet.is_active == True,
+                    )
+                    .first()
+                )
+
+                if not wallet:
+                    return None
+
+                session.expunge(wallet)
+                return self._wallet_to_dict(wallet)
+
+        except (ValueError, TypeError):
+            logger.warning(
+                "Invalid user ID supplied while checking wallet ownership"
+            )
+            return None
+
+        except Exception as exc:
+            logger.error(
+                "Error checking wallet ownership: %s",
+                exc,
+            )
+            return None
+
+    def require_owned_wallet(
+        self,
+        wallet_id: str,
+        user_id: uuid.UUID,
+    ) -> Dict[str, Any]:
+        """Retrieve an active wallet owned by the specified user."""
+        return self._wallet_for_user_or_error(wallet_id, user_id)
+
+    def get_user_wallet_balance(
+        self,
+        wallet_id: str,
+        user_id: uuid.UUID,
+    ) -> Dict[str, Any]:
+        """Get a wallet balance only after ownership verification."""
+        self._wallet_for_user_or_error(wallet_id, user_id)
+        return self.get_wallet_balance(wallet_id)
+
+    def get_user_wallet_report(
+        self,
+        wallet_id: str,
+        user_id: uuid.UUID,
+    ) -> Dict[str, Any]:
+        """Get a wallet report only after ownership verification."""
+        self._wallet_for_user_or_error(wallet_id, user_id)
+        return self.get_wallet_report(wallet_id)
+
+    def get_user_transaction_history(
+        self,
+        wallet_id: str,
+        user_id: uuid.UUID,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Get transaction history only after ownership verification."""
+        self._wallet_for_user_or_error(wallet_id, user_id)
+        return self.get_transaction_history(wallet_id, limit, offset)
+
+    def get_user_token_holdings(
+        self,
+        wallet_id: str,
+        user_id: uuid.UUID,
+    ) -> Dict[str, Any]:
+        """Get token holdings only after ownership verification."""
+        self._wallet_for_user_or_error(wallet_id, user_id)
+        return self.get_token_holdings(wallet_id)
 
     def get_wallet_by_address(self, address: str, blockchain: str) -> Optional[Dict[str, Any]]:
         """Get wallet by address and blockchain."""
@@ -324,13 +539,13 @@ class WalletService:
         }
 
     def get_wallet_balance(self, wallet_id: str) -> Dict[str, Any]:
-        """Get balance for a wallet."""
+        """Get balance for a wallet for trusted/internal callers."""
         try:
             wallet_info = self.get_wallet_by_id(wallet_id)
             if not wallet_info:
                 return {"error": "Wallet not found"}
 
-            blockchain = wallet_info["blockchain"]
+            blockchain = self._validate_blockchain(wallet_info["blockchain"])
             address = wallet_info["address"]
 
             if blockchain == "ethereum" and self.eth_provider:
@@ -380,8 +595,8 @@ class WalletService:
             return {"error": f"Provider not available for {blockchain}"}
 
         except Exception as e:
-            logger.error(f"Error getting balance: {e}")
-            return {"error": str(e)}
+            logger.exception("Error getting balance")
+            return {"error": "Unable to retrieve wallet balance"}
 
     def get_wallet_report(self, wallet_id: str) -> Dict[str, Any]:
         """
@@ -472,8 +687,8 @@ class WalletService:
             return result
 
         except Exception as e:
-            logger.error(f"Error getting wallet report: {e}")
-            return {"error": str(e)}
+            logger.exception("Error getting wallet report")
+            return {"error": "Unable to retrieve wallet report"}
 
     @staticmethod
     def _normalize_transaction_status(status: Optional[str]) -> str:
@@ -972,7 +1187,7 @@ class WalletService:
             logger.error(f"Error getting token holdings: {e}")
             return {"error": str(e)}
 
-    def send_transaction(self, wallet_id: str, to_address: str, amount: float, asset: str = None) -> Dict[str, Any]:
+    def send_transaction(self, wallet_id: str, to_address: str, amount: float, asset: str = None, user_id: uuid.UUID = None) -> Dict[str, Any]:
         """
         Send a transaction from a wallet.
 
@@ -993,11 +1208,15 @@ class WalletService:
             Transaction result with tx_hash.
         """
         try:
-            wallet_info = self.get_wallet_by_id(wallet_id)
-            if not wallet_info:
-                return {"error": "Wallet not found"}
+            amount = self._validate_amount(amount)
+            if not to_address or not str(to_address).strip():
+                return {"error": "Recipient address is required"}
 
-            blockchain = wallet_info["blockchain"]
+            if user_id is None:
+                return {"error": "Authenticated user ID is required to send a transaction"}
+
+            wallet_info = self._wallet_for_user_or_error(wallet_id, user_id)
+            blockchain = self._validate_blockchain(wallet_info["blockchain"])
             address = wallet_info["address"]
 
             # Get the wallet from database
@@ -1010,8 +1229,11 @@ class WalletService:
                 if not wallet:
                     return {"error": "Wallet not found in database"}
 
-                # Decrypt private key (simplified for now)
-                private_key_hex = wallet.encrypted_private_key
+                encrypted_private_key = wallet.encrypted_private_key
+                if not encrypted_private_key:
+                    return {"error": "Private key not available"}
+
+                private_key_hex = self._decrypt_secret(encrypted_private_key)
                 if not private_key_hex:
                     return {"error": "Private key not available"}
 
@@ -1057,9 +1279,12 @@ class WalletService:
             result["status"] = "pending"
             return result
 
-        except Exception as e:
-            logger.error(f"Error sending transaction: {e}")
+        except (ValueError, PermissionError, RuntimeError) as e:
+            logger.warning("Wallet transaction request rejected: %s", e)
             return {"error": str(e)}
+        except Exception as e:
+            logger.exception("Error sending transaction")
+            return {"error": "Transaction failed"}
 
     def _send_eth_transaction(self, from_address: str, to_address: str, amount: float, private_key: bytes) -> Dict[str, Any]:
         """
@@ -1122,12 +1347,11 @@ class WalletService:
                 "amount": amount,
                 "asset": "ETH",
                 "fee": float(fee),
-                "raw_transaction": signed_tx.raw_transaction.hex(),
             }
 
         except Exception as e:
-            logger.error(f"Error sending ETH transaction: {e}")
-            return {"error": str(e)}
+            logger.exception("Error sending ETH transaction")
+            return {"error": "Ethereum transaction failed"}
 
     def _send_btc_transaction(self, from_address: str, to_address: str, amount: float, private_key: bytes) -> Dict[str, Any]:
         """
@@ -1286,8 +1510,8 @@ class WalletService:
             }
 
         except Exception as e:
-            logger.error(f"Error sending BTC transaction: {e}")
-            return {"error": str(e)}
+            logger.exception("Error sending BTC transaction")
+            return {"error": "Bitcoin transaction failed"}
 
     def _create_raw_transaction_manual(self, inputs: list, outputs: dict) -> str:
         """Manually create a raw transaction (simplified)."""
@@ -1428,8 +1652,8 @@ class WalletService:
                 return {"error": f"Signing failed: {str(e)}"}
 
         except Exception as e:
-            logger.error(f"Error sending TRX transaction: {e}")
-            return {"error": str(e)}
+            logger.exception("Error sending TRX transaction")
+            return {"error": "TRON transaction failed"}
 
     def _send_trx_transaction_fallback(self, from_address: str, to_address: str, amount_sun: int, private_key: bytes) -> Dict[str, Any]:
         """
