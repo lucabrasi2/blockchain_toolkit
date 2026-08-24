@@ -138,6 +138,45 @@ class AssetService:
         )
 
     ###########################################################################
+    # Validation helpers
+    ###########################################################################
+
+    @staticmethod
+    def _normalize_text(value: Any, field: str) -> str:
+        """Normalize a required text input and reject empty values."""
+        if not isinstance(value, str):
+            raise ValueError(f"{field} must be a string.")
+        value = value.strip()
+        if not value:
+            raise ValueError(f"{field} cannot be empty.")
+        return value
+
+    @classmethod
+    def _normalize_standard(cls, standard: Any) -> str:
+        """Normalize and validate a supported token standard."""
+        value = cls._normalize_text(standard, "Token standard").upper()
+        if not cls.is_token(value):
+            raise ValueError(f"Unsupported token standard: {value}")
+        return value
+
+    @staticmethod
+    def _validate_address(value: Any, field: str) -> str:
+        """Perform safe structural validation without implementing chain rules."""
+        address = AssetService._normalize_text(value, field)
+        if len(address) > 255:
+            raise ValueError(f"{field} is too long.")
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in address):
+            raise ValueError(f"{field} contains invalid control characters.")
+        return address
+
+    @staticmethod
+    def _safe_error_result(base: dict[str, Any], message: str) -> dict[str, Any]:
+        """Return a stable client-safe error without exposing provider internals."""
+        result = dict(base)
+        result["error"] = message
+        return result
+
+    ###########################################################################
     # Native Asset
     ###########################################################################
 
@@ -209,22 +248,9 @@ class AssetService:
             )
         """
 
-        if not isinstance(
-            blockchain,
-            str,
-        ):
-            raise ValueError(
-                "Blockchain must be a string."
-            )
-
-        normalized_blockchain = (
-            blockchain.strip().lower()
-        )
-
-        if not normalized_blockchain:
-            raise ValueError(
-                "Blockchain cannot be empty."
-            )
+        normalized_blockchain = cls._normalize_text(
+            blockchain, "Blockchain"
+        ).lower()
 
         #######################################################################
         # Token Standard
@@ -232,25 +258,7 @@ class AssetService:
 
         if standard is not None:
 
-            if not isinstance(
-                standard,
-                str,
-            ):
-                raise ValueError(
-                    "Token standard must be a string."
-                )
-
-            normalized_standard = (
-                standard.strip().upper()
-            )
-
-            if not cls.is_token(
-                normalized_standard,
-            ):
-                raise ValueError(
-                    f"Unsupported token standard: "
-                    f"{normalized_standard}"
-                )
+            normalized_standard = cls._normalize_standard(standard)
 
             standard_blockchain = {
                 ERC20: ETHEREUM,
@@ -356,21 +364,11 @@ class AssetService:
             token_address,
         )
 
-        if not isinstance(
-            token_address,
-            str,
-        ):
+        try:
+            token_address = self._validate_address(token_address, "Token address")
+        except ValueError as error:
             return {
-                "error": "Token address must be a string.",
-                "standard": ERC20,
-                "blockchain": ETHEREUM,
-            }
-
-        token_address = token_address.strip()
-
-        if not token_address:
-            return {
-                "error": "Token address cannot be empty.",
+                "error": str(error),
                 "standard": ERC20,
                 "blockchain": ETHEREUM,
             }
@@ -422,7 +420,7 @@ class AssetService:
                 "standard": ERC20,
                 "address": token_address,
                 "is_token": False,
-                "error": str(error),
+                "error": "Unable to retrieve ERC-20 token information.",
             }
 
     ###########################################################################
@@ -472,7 +470,7 @@ class AssetService:
                 "token_address": token_address,
                 "wallet_address": wallet_address,
                 "balance": None,
-                "error": str(error),
+                "error": "Unable to retrieve ERC-20 token balance.",
             }
 
     ###########################################################################
@@ -493,21 +491,13 @@ class AssetService:
             token_address,
         )
 
-        if not isinstance(
-            token_address,
-            str,
-        ):
+        try:
+            token_address = self._validate_address(token_address, "Token address")
+            if wallet_address is not None:
+                wallet_address = self._validate_address(wallet_address, "Wallet address")
+        except ValueError as error:
             return {
-                "error": "Token address must be a string.",
-                "standard": TRC20,
-                "blockchain": TRON,
-            }
-
-        token_address = token_address.strip()
-
-        if not token_address:
-            return {
-                "error": "Token address cannot be empty.",
+                "error": str(error),
                 "standard": TRC20,
                 "blockchain": TRON,
             }
@@ -556,7 +546,7 @@ class AssetService:
                 "standard": TRC20,
                 "address": token_address,
                 "is_token": False,
-                "error": str(error),
+                "error": "Unable to retrieve TRC-20 token information.",
             }
 
     ###########################################################################
@@ -621,7 +611,7 @@ class AssetService:
                 "token_address": token_address,
                 "wallet_address": wallet_address,
                 "balance": None,
-                "error": str(error),
+                "error": "Unable to retrieve TRC-20 token balance.",
             }
 
     ###########################################################################
@@ -654,17 +644,10 @@ class AssetService:
             Normalized token information.
         """
 
-        if not isinstance(
-            standard,
-            str,
-        ):
-            return {
-                "error": "Token standard must be a string."
-            }
-
-        normalized_standard = (
-            standard.strip().upper()
-        )
+        try:
+            normalized_standard = self._normalize_standard(standard)
+        except ValueError as error:
+            return {"error": str(error)}
 
         #######################################################################
         # ERC-20
@@ -747,17 +730,10 @@ class AssetService:
             Normalized token balance.
         """
 
-        if not isinstance(
-            standard,
-            str,
-        ):
-            return {
-                "error": "Token standard must be a string."
-            }
-
-        normalized_standard = (
-            standard.strip().upper()
-        )
+        try:
+            normalized_standard = self._normalize_standard(standard)
+        except ValueError as error:
+            return {"error": str(error)}
 
         #######################################################################
         # ERC-20
@@ -821,6 +797,10 @@ class AssetService:
         }
 
         if address is not None:
+            try:
+                address = AssetService._validate_address(address, "Bitcoin address")
+            except ValueError as error:
+                return AssetService._safe_error_result(result, str(error))
 
             result["address"] = address
 
@@ -866,7 +846,7 @@ class AssetService:
         """
 
         try:
-
+            wallet_address = AssetService._validate_address(wallet_address, "Bitcoin wallet address")
             balance = get_bitcoin_token_balance(
                 BTC,
                 wallet_address,
@@ -898,7 +878,7 @@ class AssetService:
                 "wallet_address": wallet_address,
                 "balance": None,
                 "is_token": False,
-                "error": str(error),
+                "error": "Unable to retrieve Bitcoin balance.",
             }
 
 
