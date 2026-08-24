@@ -26,7 +26,7 @@ Version
 
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -56,6 +56,11 @@ class UserService:
     # =========================================================================
     # Internal Helpers
     # =========================================================================
+
+    @staticmethod
+    def _utcnow() -> datetime:
+        """Return current UTC as naive datetime for the existing DB schema."""
+        return datetime.now(timezone.utc).replace(tzinfo=None)
 
     @staticmethod
     def _normalize_username(username: str) -> Optional[str]:
@@ -202,7 +207,7 @@ class UserService:
                     ),
                     role=normalized_role,
                     api_key=self._generate_api_key(),
-                    created_at=datetime.utcnow(),
+                    created_at=self._utcnow(),
                     is_active=True,
                 )
 
@@ -266,31 +271,22 @@ class UserService:
                 )
 
                 if not user:
-                    logger.warning(
-                        "User not found: %s",
-                        normalized_username,
-                    )
+                    logger.warning("Authentication failed: invalid credentials")
                     return None
 
                 if not user.is_active:
-                    logger.warning(
-                        "Inactive user attempted login: %s",
-                        normalized_username,
-                    )
+                    logger.warning("Authentication failed: account inactive")
                     return None
 
                 if not check_password_hash(
                     user.password_hash,
                     password,
                 ):
-                    logger.warning(
-                        "Invalid password for user: %s",
-                        normalized_username,
-                    )
+                    logger.warning("Authentication failed: invalid credentials")
                     return None
 
                 # Update last login only after successful authentication.
-                user.last_login = datetime.utcnow()
+                user.last_login = self._utcnow()
                 session.flush()
 
                 # Detach the user so it can safely be returned after the
@@ -500,25 +496,21 @@ class UserService:
                     )
                     return False
 
-                # Fields that must never be changed through the generic
-                # update method.
-                protected_fields = {
-                    "id",
-                    "password_hash",
-                    "api_key",
-                    "created_at",
-                }
+                # Explicit allowlist: generic updates may only modify ordinary
+                # profile/preferences fields. Credentials, authorization,
+                # account status, MFA, identifiers, and timestamps require
+                # dedicated operations.
+                allowed_fields = {"username", "email", "default_network"}
+
+                rejected_fields = {key for key in kwargs if key not in allowed_fields}
+                if rejected_fields:
+                    logger.warning(
+                        "User update rejected for protected/unsupported fields: %s",
+                        sorted(rejected_fields),
+                    )
+                    return False
 
                 for key, value in kwargs.items():
-                    if key in protected_fields:
-                        continue
-
-                    if not hasattr(user, key):
-                        logger.warning(
-                            "Ignoring unknown user field: %s",
-                            key,
-                        )
-                        continue
 
                     # Normalize supported user-facing fields.
                     if key == "username":
@@ -539,18 +531,15 @@ class UserService:
                             )
                             return False
 
-                    elif key == "role":
-                        value = self._normalize_role(value)
-                        if not value:
-                            logger.warning(
-                                "Invalid role supplied for %s",
-                                user_id,
-                            )
+                    elif key == "default_network":
+                        if not isinstance(value, str) or not value.strip():
+                            logger.warning("Invalid default network supplied for %s", user_id)
                             return False
+                        value = value.strip().lower()
 
                     setattr(user, key, value)
 
-                user.updated_at = datetime.utcnow()
+                user.updated_at = self._utcnow()
                 session.flush()
 
                 logger.info(
@@ -626,14 +615,11 @@ class UserService:
                 user.password_hash = generate_password_hash(
                     normalized_password
                 )
-                user.updated_at = datetime.utcnow()
+                user.updated_at = self._utcnow()
 
                 session.flush()
 
-                logger.info(
-                    "Password changed for user: %s",
-                    user_id,
-                )
+                logger.info("Password changed successfully")
 
                 return True
 
@@ -689,17 +675,24 @@ class UserService:
                     )
                     return None
 
-                new_api_key = self._generate_api_key()
+                new_api_key = None
+                for _ in range(5):
+                    candidate = self._generate_api_key()
+                    exists = session.query(User.id).filter(User.api_key == candidate).first()
+                    if not exists:
+                        new_api_key = candidate
+                        break
+
+                if new_api_key is None:
+                    logger.error("Unable to generate a unique API key")
+                    return None
 
                 user.api_key = new_api_key
-                user.updated_at = datetime.utcnow()
+                user.updated_at = self._utcnow()
 
                 session.flush()
 
-                logger.info(
-                    "API key regenerated for user: %s",
-                    user_id,
-                )
+                logger.info("API key regenerated successfully")
 
                 return new_api_key
 
@@ -756,14 +749,11 @@ class UserService:
                     return False
 
                 user.is_active = False
-                user.updated_at = datetime.utcnow()
+                user.updated_at = self._utcnow()
 
                 session.flush()
 
-                logger.info(
-                    "User deactivated: %s",
-                    user_id,
-                )
+                logger.info("User deactivated successfully")
 
                 return True
 
@@ -911,4 +901,4 @@ class UserService:
 
 # =============================================================================
 # End of File
-# =============================================================================
+# ====================
